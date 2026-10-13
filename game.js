@@ -72,7 +72,7 @@ function writeSave(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s));
 
 let difficulty = "easy";
 function newGame() {
-  return { phase: "menu", difficulty, time: 0, gold: START_GOLD, lives: START_LIVES, waveCursor: 0, activeWave: -1, kills: 0, leaksThisWave: 0, speed: 1, towers: [], enemies: [], shots: [], particles: [], floaters: [], puffs: [], jobs: [], flashes: [], selected: null, armed: null, hover: null, shake: 0, announce: null, nextId: 1 };
+  return { phase: "menu", difficulty, time: 0, gold: START_GOLD, lives: START_LIVES, waveCursor: 0, activeWave: -1, kills: 0, leaksThisWave: 0, boostNext: false, speed: 1, towers: [], enemies: [], shots: [], particles: [], floaters: [], puffs: [], jobs: [], flashes: [], selected: null, armed: null, hover: null, shake: 0, announce: null, nextId: 1 };
 }
 function towerRuntime(t) {
   const b = TOWERS[t.kind];
@@ -204,7 +204,12 @@ function step(g, dt) {
   compact(g.shots, (s) => s.life <= 0); compact(g.enemies, (e) => !e.alive);
   const spawning = g.jobs.some((j) => j.left > 0);
   if (!spawning && !g.enemies.some((e) => e.alive)) {
-    if (g.leaksThisWave === 0) { g.gold += PERFECT_BONUS; g.announce = { text: "완벽 방어 +" + PERFECT_BONUS, life: 1.45, max: 1.45 }; sfx.perfect(); }
+    if (g.leaksThisWave === 0) {
+      g.gold += PERFECT_BONUS;
+      g.boostNext = g.waveCursor < WAVES.length;
+      g.announce = { text: "완벽 방어 +" + PERFECT_BONUS + (g.boostNext ? " · 다음 파도 +5%" : ""), life: 1.6, max: 1.6 };
+      sfx.perfect();
+    } else g.boostNext = false;
     g.shots.length = 0;
     if (g.waveCursor >= WAVES.length) { g.phase = "victory"; g.announce = { text: "전선 사수", life: 2.2, max: 2.2 }; sfx.win(); }
     else { g.phase = "prep"; g.leaksThisWave = 0; }
@@ -224,13 +229,29 @@ function onCell(g, x, y) {
   }
   g.selected = null;
 }
+function swell(groups) {
+  const counts = groups.map((group) => group.count);
+  const total = counts.reduce((a, b) => a + b, 0);
+  let extra = Math.round(total * 1.05) - total;
+  if (extra <= 0) return groups.map((group) => ({ ...group }));
+  const order = counts.map((c, i) => i).sort((a, b) => counts[b] - counts[a] || a - b);
+  const out = counts.slice();
+  for (let n = 0; extra > 0; n++, extra--) out[order[n % order.length]]++;
+  return groups.map((group, i) => ({ ...group, count: out[i] }));
+}
+function nextPlan(g) {
+  const base = WAVES[g.waveCursor];
+  return base && g.boostNext ? swell(base) : base;
+}
 function startWave(g) {
   if (g.phase !== "prep" || g.waveCursor >= WAVES.length) return;
-  const def = WAVES[g.waveCursor];
+  const boosted = !!g.boostNext;
+  const def = nextPlan(g);
+  g.boostNext = false;
   g.activeWave = g.waveCursor++; g.phase = "combat"; g.leaksThisWave = 0;
   g.jobs = def.map((group) => ({ type: group.type, left: group.count, every: group.every, acc: 0, delay: group.delay || 0 }));
   const titan = def.some((d) => d.type === "titan");
-  g.announce = { text: titan ? "거대충 접근" : "제 " + (g.activeWave + 1) + " 파도", life: titan ? 1.7 : 1.35, max: titan ? 1.7 : 1.35 };
+  g.announce = { text: (titan ? "거대충 접근" : "제 " + (g.activeWave + 1) + " 파도") + (boosted ? " +5%" : ""), life: titan ? 1.7 : 1.35, max: titan ? 1.7 : 1.35 };
   sfx.wave();
 }
 
@@ -539,7 +560,7 @@ function paint() {
   play.disabled = paused || g.phase !== "prep";
   play.textContent = side ? (g.phase === "prep" ? "플레이" : "교전") : (g.phase === "prep" ? "플레이 · 제 " + (g.waveCursor + 1) + " 파도" : "교전 중 · 적 " + enemyCount());
   const preview = document.getElementById("preview");
-  preview.textContent = g.phase === "prep" && WAVES[g.waveCursor] ? WAVES[g.waveCursor].map((w) => ENEMIES[w.type].name + " " + w.count).join(" · ") : "";
+  preview.textContent = g.phase === "prep" && nextPlan(g) ? nextPlan(g).map((w) => ENEMIES[w.type].name + " " + w.count).join(" · ") : "";
   const sel = g.selected != null ? g.towers.find((t) => t.id === g.selected) : null;
   document.getElementById("shop").hidden = !!sel;
   document.getElementById("up").hidden = !sel;
