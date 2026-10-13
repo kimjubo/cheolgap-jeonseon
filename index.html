@@ -385,6 +385,15 @@ function blitFrame(ctx, img, frame, cx, cy, size) {
   const fw = img.width / 2, fh = img.height / 2, col = frame % 2, row = (frame / 2) | 0;
   ctx.drawImage(img, col * fw, row * fh, fw, fh, cx - size / 2, cy - size / 2, size, size);
 }
+const tintCache = new WeakMap();
+function redTint(img) {
+  let c = tintCache.get(img);
+  if (c) return c;
+  c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+  const x = c.getContext("2d"); x.drawImage(img, 0, 0);
+  x.globalCompositeOperation = "source-atop"; x.fillStyle = "#ff2626"; x.fillRect(0, 0, c.width, c.height);
+  tintCache.set(img, c); return c;
+}
 const center = (gx, gy) => ({ x: view.ox + (gx + 0.5) * view.cell, y: view.oy + (gy + 0.5) * view.cell });
 function shadow(ctx, x, y, rx, ry) { ctx.fillStyle = "rgba(40,24,16,0.28)"; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); }
 function paintBoard(art) {
@@ -457,7 +466,7 @@ function draw(ctx, g, art) {
       shadow(ctx, sx, sy + cell * 0.16, cell * (e.flying ? 0.16 : 0.24), cell * 0.08);
       const img = art.enemies[e.kind], frame = (Math.floor(g.time * (e.flying ? 6 : 5) + e.id * 0.7) % 4 + 4) % 4;
       if (img) blitFrame(ctx, img, frame, sx, sy - lift - size * 0.08, size);
-      if (e.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.7, e.flash * 6); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(sx, sy - lift - size * 0.08, size * 0.22, size * 0.28, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      if (img && e.flash > 0) { ctx.save(); ctx.globalAlpha = Math.min(0.7, e.flash * 7); blitFrame(ctx, redTint(img), frame, sx, sy - lift - size * 0.08, size); ctx.restore(); }
     } });
   }
   items.sort((a, b) => a.y - b.y); for (const item of items) item.draw();
