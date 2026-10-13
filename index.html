@@ -117,8 +117,8 @@
         <p id="best" class="muted" hidden></p>
         <div id="diff" class="diff">
           <button type="button" data-diff="easy"><b>쉬움</b><small>지금 난이도</small></button>
-          <button type="button" data-diff="normal"><b>보통</b><small>체력 2배</small></button>
-          <button type="button" data-diff="hard"><b>어려움</b><small>체력 3배</small></button>
+          <button type="button" data-diff="normal"><b>보통</b><small>체력 1.25배</small></button>
+          <button type="button" data-diff="hard"><b>어려움</b><small>체력 1.6배</small></button>
         </div>
         <button id="go" class="btn" type="button">방어 개시</button>
       </div>
@@ -186,7 +186,7 @@ window.ART=Object.assign(window.ART||{},{"tower-rifle":"data:image/webp;base64,U
 const COLS = 6, ROWS = 10, START_GOLD = 145, START_LIVES = 20, SELL_RATIO = 0.6, PERFECT_BONUS = 25, MAX_RANK = 3;
 const DMG_MUL = 1.42, RATE_MUL = 0.8, DMG_COST = [50, 90, 140], RATE_COST = [45, 80, 125];
 const ENEMY_COUNT_MUL = 2, ENEMY_HP_MUL = 1.3, ENEMY_SPEED_STEP = 0.02;
-const DIFF_HP = { easy: 1, normal: 2, hard: 3 };
+const DIFF_HP = { easy: 1, normal: 1.25, hard: 1.6 };
 const PATH = [[1,0],[1,1],[1,2],[2,2],[3,2],[4,2],[4,3],[4,4],[3,4],[2,4],[1,4],[1,5],[1,6],[2,6],[3,6],[4,6],[4,7],[4,8],[3,8],[2,8],[2,9]];
 const PATH_KEY = new Set(PATH.map(([x, y]) => x + y * COLS));
 const BLOCKED = new Set([0, 5, (ROWS - 1) * COLS, (ROWS - 1) * COLS + COLS - 1]);
