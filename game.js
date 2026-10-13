@@ -1,6 +1,7 @@
 const COLS = 6, ROWS = 10, START_GOLD = 145, START_LIVES = 20, SELL_RATIO = 0.6, PERFECT_BONUS = 25, MAX_RANK = 3;
 const DMG_MUL = 1.42, RATE_MUL = 0.8, DMG_COST = [50, 90, 140], RATE_COST = [45, 80, 125];
 const ENEMY_COUNT_MUL = 2, ENEMY_HP_MUL = 1.3, ENEMY_SPEED_STEP = 0.02;
+const DIFF_HP = { easy: 1, normal: 2, hard: 4 };
 const PATH = [[1,0],[1,1],[1,2],[2,2],[3,2],[4,2],[4,3],[4,4],[3,4],[2,4],[1,4],[1,5],[1,6],[2,6],[3,6],[4,6],[4,7],[4,8],[3,8],[2,8],[2,9]];
 const PATH_KEY = new Set(PATH.map(([x, y]) => x + y * COLS));
 const BLOCKED = new Set([0, 5, (ROWS - 1) * COLS, (ROWS - 1) * COLS + COLS - 1]);
@@ -59,17 +60,19 @@ function pointOnPath(dist) {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 const SAVE_KEY = "cheolgap-play-v1";
+function diffName(id) { return DIFF_HP[id] ? id : "easy"; }
 function loadSave() {
   try {
     const p = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
-    if (!p || p.version !== 1) return { version: 1, bestWave: 0, bestKills: 0, muted: false };
-    return { version: 1, bestWave: p.bestWave | 0, bestKills: p.bestKills | 0, muted: !!p.muted };
-  } catch { return { version: 1, bestWave: 0, bestKills: 0, muted: false }; }
+    if (!p || p.version !== 1) return { version: 1, bestWave: 0, bestKills: 0, muted: false, difficulty: "easy" };
+    return { version: 1, bestWave: p.bestWave | 0, bestKills: p.bestKills | 0, muted: !!p.muted, difficulty: diffName(p.difficulty) };
+  } catch { return { version: 1, bestWave: 0, bestKills: 0, muted: false, difficulty: "easy" }; }
 }
 function writeSave(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch { /* ignore */ } }
 
+let difficulty = "easy";
 function newGame() {
-  return { phase: "menu", time: 0, gold: START_GOLD, lives: START_LIVES, waveCursor: 0, activeWave: -1, kills: 0, leaksThisWave: 0, speed: 1, towers: [], enemies: [], shots: [], particles: [], floaters: [], puffs: [], jobs: [], flashes: [], selected: null, armed: null, hover: null, shake: 0, announce: null, nextId: 1 };
+  return { phase: "menu", difficulty, time: 0, gold: START_GOLD, lives: START_LIVES, waveCursor: 0, activeWave: -1, kills: 0, leaksThisWave: 0, speed: 1, towers: [], enemies: [], shots: [], particles: [], floaters: [], puffs: [], jobs: [], flashes: [], selected: null, armed: null, hover: null, shake: 0, announce: null, nextId: 1 };
 }
 function towerRuntime(t) {
   const b = TOWERS[t.kind];
@@ -131,7 +134,7 @@ function spawnEnemy(g, kind) {
   let queue = 0;
   for (const e of g.enemies) if (e.alive && e.pathDist < 0.45) queue++;
   const pathDist = -queue * 0.42, pos = pointOnPath(pathDist), wave = Math.max(0, g.activeWave);
-  const hp = Math.max(1, Math.round(def.hp * ENEMY_HP_MUL * (wave < 9 ? 1 : 1 + (wave - 9) * 0.11)));
+  const hp = Math.max(1, Math.round(def.hp * ENEMY_HP_MUL * (DIFF_HP[g.difficulty] || 1) * (wave < 9 ? 1 : 1 + (wave - 9) * 0.11)));
   g.enemies.push({ id: g.nextId++, kind, hp, maxHp: hp, speed: def.speed * (1 + ENEMY_SPEED_STEP * wave), gold: Math.max(1, Math.round(def.gold * (1 + Math.max(0, wave - 8) * 0.07))), armor: def.armor, flying: def.flying, leak: def.leak, pathDist, x: pos.x, y: pos.y, alive: true, flash: 0 });
   if (kind === "titan") { g.shake = Math.max(g.shake, 10); g.announce = { text: "거대충 접근", life: 1.7, max: 1.7 }; }
 }
@@ -484,6 +487,8 @@ const sfx = (() => {
 
 const g = newGame();
 const save = loadSave();
+difficulty = save.difficulty;
+g.difficulty = difficulty;
 let art = { ground: null, creep: null, rock: null, fort: null, hive: null, shots: null, burst: null, towers: {}, enemies: {} };
 const canvas = document.getElementById("board");
 const wrap = document.getElementById("stage");
@@ -521,6 +526,7 @@ function paint() {
   const best = document.getElementById("best");
   best.hidden = save.bestWave <= 0;
   best.textContent = "최고 기록 " + save.bestWave + "파도 · 처치 " + save.bestKills;
+  for (const b of document.querySelectorAll("#diff button")) b.dataset.on = b.dataset.diff === (g.difficulty || "easy") ? "true" : "false";
   if (g.phase === "victory" || g.phase === "defeat") {
     document.getElementById("end-kicker").textContent = g.phase === "victory" ? "승리" : "패배";
     document.getElementById("end-title").textContent = g.phase === "victory" ? "전선 사수" : "전선 붕괴";
@@ -612,6 +618,7 @@ function bootImages() {
 }
 
 document.getElementById("go").onclick = begin;
+for (const b of document.querySelectorAll("#diff button")) b.onclick = () => { difficulty = b.dataset.diff; g.difficulty = difficulty; save.difficulty = difficulty; writeSave(save); paint(); };
 document.getElementById("menu").onclick = (e) => { if (e.target.id === "menu") begin(); };
 document.getElementById("again").onclick = restart;
 document.getElementById("play").onclick = () => { if (paused) return; sfx.unlock(); startWave(g); paint(); };
