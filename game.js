@@ -513,7 +513,7 @@ function paint() {
   document.getElementById("end").hidden = g.phase !== "victory" && g.phase !== "defeat";
   document.getElementById("pause").hidden = !paused;
   document.getElementById("dock").hidden = g.phase !== "prep" && g.phase !== "combat";
-  const side = (g.phase === "prep" || g.phase === "combat") && window.matchMedia("(max-aspect-ratio: 9/16)").matches;
+  const side = (g.phase === "prep" || g.phase === "combat") && window.matchMedia("(orientation: portrait) and (max-width: 1200px)").matches;
   document.getElementById("app").classList.toggle("side", side);
   const pauseBtn = document.getElementById("pause-btn");
   pauseBtn.disabled = !canPause();
