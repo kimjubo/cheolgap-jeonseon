@@ -410,10 +410,22 @@ function draw(ctx, g, art) {
   ctx.font = '700 13px "IBM Plex Sans KR", sans-serif'; ctx.textAlign = "center"; ctx.lineWidth = 3;
   for (const f of g.floaters) { ctx.globalAlpha = Math.max(0, f.life / f.max); ctx.strokeStyle = "#101820"; ctx.strokeText(f.text, ox + f.x * cell, oy + f.y * cell); ctx.fillStyle = f.color; ctx.fillText(f.text, ox + f.x * cell, oy + f.y * cell); ctx.globalAlpha = 1; }
   if (g.announce && g.announce.life > 0) {
+    const lines = wrapChars(g.announce.text, 6);
+    const fontSize = Math.max(28, cell * 0.72), lineH = fontSize * 1.15;
+    const cx = ox + COLS * cell / 2, cy = oy + ROWS * cell / 2;
     ctx.globalAlpha = Math.max(0, Math.min(1, g.announce.life * 2));
-    ctx.font = '400 ' + Math.max(28, cell * 0.72) + 'px "Black Han Sans", sans-serif';
-    ctx.lineWidth = 6; ctx.strokeStyle = "#101820"; ctx.strokeText(g.announce.text, w / 2, oy + cell * 1.35); ctx.fillStyle = "#f6f1e6"; ctx.fillText(g.announce.text, w / 2, oy + cell * 1.35); ctx.globalAlpha = 1;
+    ctx.font = '400 ' + fontSize + 'px "Black Han Sans", sans-serif';
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineWidth = 6; ctx.strokeStyle = "#101820"; ctx.fillStyle = "#f6f1e6";
+    const top = cy - ((lines.length - 1) * lineH) / 2;
+    for (let i = 0; i < lines.length; i++) { const y = top + i * lineH; ctx.strokeText(lines[i], cx, y); ctx.fillText(lines[i], cx, y); }
+    ctx.textBaseline = "alphabetic"; ctx.globalAlpha = 1;
   }
+}
+function wrapChars(text, size) {
+  const chars = Array.from(text || "");
+  const lines = [];
+  for (let i = 0; i < chars.length; i += size) lines.push(chars.slice(i, i + size).join(""));
+  return lines.length ? lines : [""];
 }
 function cellFromPointer(ev, canvas) {
   const rect = canvas.getBoundingClientRect();
