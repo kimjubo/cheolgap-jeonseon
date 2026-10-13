@@ -99,6 +99,15 @@
     #app.side .row { grid-template-columns: 1fr; }
     #app.side #up .btn { height: 42px; font-size: 13px; }
   }
+  #ranks { z-index: 8; justify-content: center; background: rgb(16 24 32 / .78); }
+  #ranks .card { width: min(100%, 420px); max-height: calc(100% - 24px); overflow: auto; }
+  .nick { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 4px; }
+  .nick input { flex: 1; height: 40px; border-radius: 10px; border: 3px solid var(--border); background: var(--surface-2); color: var(--fg); padding: 0 10px; font: inherit; }
+  #rank-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 12px; }
+  .rank { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; align-items: center; background: var(--surface-2); border-radius: 12px; padding: 8px 10px; }
+  .rank b { font-size: 15px; }
+  .rank small { display: block; }
+  .rank strong { color: var(--gold); font-size: 18px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -132,6 +141,17 @@
           <button type="button" data-diff="hard"><b>어려움</b><small>체력 1.6배</small></button>
         </div>
         <button id="go" class="btn" type="button">방어 개시</button>
+        <button id="open-board" class="btn steel" type="button">리더보드</button>
+      </div>
+    </div>
+    <div id="ranks" class="scrim" hidden>
+      <div class="card plate">
+        <div class="kicker">남은 광물</div>
+        <h2>리더보드</h2>
+        <p class="muted">스무 파도를 막은 판만 올라갑니다. 남은 광물이 많을수록 위입니다.</p>
+        <label class="nick">이름 <input id="nick" maxlength="8" autocomplete="nickname" placeholder="지휘관"></label>
+        <div id="rank-list"></div>
+        <button id="close-board" class="btn" type="button">닫기</button>
       </div>
     </div>
     <div id="end" class="scrim" hidden style="justify-content:center;background:rgb(16 24 32 / .72)">
@@ -258,18 +278,45 @@ function pointOnPath(dist) {
 }
 const SAVE_KEY = "cheolgap-play-v1";
 function diffName(id) { return DIFF_HP[id] ? id : "easy"; }
+function blankSave() { return { version: 1, bestWave: 0, bestKills: 0, muted: false, difficulty: "easy", nick: "지휘관", board: [] }; }
+function cleanBoard(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.filter((r) => r && Number.isFinite(+r.gold)).map((r) => ({
+    name: String(r.name || "지휘관").trim().slice(0, 8) || "지휘관",
+    gold: r.gold | 0,
+    kills: r.kills | 0,
+    difficulty: diffName(r.difficulty),
+    at: r.at | 0,
+  })).sort((a, b) => b.gold - a.gold || b.kills - a.kills || b.at - a.at).slice(0, 20);
+}
 function loadSave() {
   try {
     const p = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
-    if (!p || p.version !== 1) return { version: 1, bestWave: 0, bestKills: 0, muted: false, difficulty: "easy" };
-    return { version: 1, bestWave: p.bestWave | 0, bestKills: p.bestKills | 0, muted: !!p.muted, difficulty: diffName(p.difficulty) };
-  } catch { return { version: 1, bestWave: 0, bestKills: 0, muted: false, difficulty: "easy" }; }
+    if (!p || p.version !== 1) return blankSave();
+    return { version: 1, bestWave: p.bestWave | 0, bestKills: p.bestKills | 0, muted: !!p.muted, difficulty: diffName(p.difficulty), nick: String(p.nick || "지휘관").trim().slice(0, 8) || "지휘관", board: cleanBoard(p.board) };
+  } catch { return blankSave(); }
 }
 function writeSave(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch { /* ignore */ } }
+const DIFF_LABEL = { easy: "쉬움", normal: "보통", hard: "어려움" };
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => "\u0026" + ({ "&": "amp", "<": "lt", ">": "gt", '"': "quot" }[c]) + ";"); }
+function recordBoard(g) {
+  if (g.boarded || g.phase !== "victory") return;
+  g.boarded = true;
+  const row = { name: (save.nick || "지휘관").trim().slice(0, 8) || "지휘관", gold: g.gold | 0, kills: g.kills | 0, difficulty: diffName(g.difficulty), at: Date.now() };
+  save.board = cleanBoard(save.board.concat(row)).sort((a, b) => b.gold - a.gold || b.kills - a.kills || b.at - a.at).slice(0, 20);
+  g.boardRank = save.board.findIndex((r) => r.at === row.at) + 1;
+  writeSave(save);
+}
+function renderBoard() {
+  const list = document.getElementById("rank-list");
+  if (!save.board.length) { list.innerHTML = '<p class="muted">아직 기록이 없습니다.</p>'; return; }
+  list.innerHTML = save.board.map((row, i) => '<div class="rank"><span>' + (i + 1) + '</span><div><b>' + esc(row.name) + '</b><small class="muted">' + (DIFF_LABEL[row.difficulty] || "") + '</small></div><strong>◆ ' + row.gold + '</strong></div>').join("");
+}
+let boardOpen = false;
 
 let difficulty = "easy";
 function newGame() {
-  return { phase: "menu", difficulty, time: 0, gold: START_GOLD, lives: START_LIVES, waveCursor: 0, activeWave: -1, kills: 0, leaksThisWave: 0, boostNext: false, speed: 1, towers: [], enemies: [], shots: [], particles: [], floaters: [], puffs: [], jobs: [], flashes: [], selected: null, armed: null, hover: null, shake: 0, announce: null, nextId: 1 };
+  return { phase: "menu", difficulty, time: 0, gold: START_GOLD, lives: START_LIVES, waveCursor: 0, activeWave: -1, kills: 0, leaksThisWave: 0, boostNext: false, boarded: false, boardRank: 0, speed: 1, towers: [], enemies: [], shots: [], particles: [], floaters: [], puffs: [], jobs: [], flashes: [], selected: null, armed: null, hover: null, shake: 0, announce: null, nextId: 1 };
 }
 function towerRuntime(t) {
   const b = TOWERS[t.kind];
@@ -408,7 +455,7 @@ function step(g, dt) {
       sfx.perfect();
     } else g.boostNext = false;
     g.shots.length = 0;
-    if (g.waveCursor >= WAVES.length) { g.phase = "victory"; g.announce = { text: "전선 사수", life: 2.2, max: 2.2 }; sfx.win(); }
+    if (g.waveCursor >= WAVES.length) { g.phase = "victory"; recordBoard(g); g.announce = { text: "전선 사수", life: 2.2, max: 2.2 }; sfx.win(); }
     else { g.phase = "prep"; g.leaksThisWave = 0; }
     paint();
   }
@@ -746,6 +793,7 @@ function paint() {
   wave.textContent = g.phase === "menu" ? "대기" : g.phase === "victory" ? "사수 완료" : g.phase === "defeat" ? "제 " + (g.activeWave + 1) + " 파도 돌파" : "제 " + n + " 파도 / " + WAVES.length;
   document.getElementById("speed").textContent = g.speed === 1 ? "×1" : "×2";
   document.getElementById("menu").hidden = g.phase !== "menu";
+  document.getElementById("ranks").hidden = !boardOpen || g.phase !== "menu";
   document.getElementById("end").hidden = g.phase !== "victory" && g.phase !== "defeat";
   document.getElementById("pause").hidden = !paused;
   document.getElementById("dock").hidden = g.phase !== "prep" && g.phase !== "combat";
@@ -761,7 +809,7 @@ function paint() {
   if (g.phase === "victory" || g.phase === "defeat") {
     document.getElementById("end-kicker").textContent = g.phase === "victory" ? "승리" : "패배";
     document.getElementById("end-title").textContent = g.phase === "victory" ? "전선 사수" : "전선 붕괴";
-    document.getElementById("end-copy").textContent = g.phase === "victory" ? "스무 번의 파도를 모두 막아냈습니다." : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
+    document.getElementById("end-copy").textContent = g.phase === "victory" ? "스무 번의 파도를 모두 막아냈습니다." + (g.boardRank ? " 남은 광물 " + g.boardRank + "위." : "") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
     document.getElementById("end-lives").textContent = g.lives;
     document.getElementById("end-gold").textContent = g.gold;
     document.getElementById("end-kills").textContent = g.kills;
@@ -833,7 +881,7 @@ function frame(now) {
   if (changed || g.phase === "menu" || g.phase === "prep" || paused) paint();
   requestAnimationFrame(frame);
 }
-function begin() { sfx.unlock(); paused = false; if (g.phase === "menu") { g.phase = "prep"; sfx.wave(); } paint(); }
+function begin() { sfx.unlock(); boardOpen = false; paused = false; if (g.phase === "menu") { g.phase = "prep"; sfx.wave(); } paint(); }
 function restart() { sfx.unlock(); paused = false; const fresh = newGame(); Object.assign(g, fresh); g.phase = "prep"; g.towers = fresh.towers; g.enemies = fresh.enemies; g.shots = fresh.shots; paint(); }
 function toMenu() { sfx.unlock(); paused = false; const fresh = newGame(); Object.assign(g, fresh); g.towers = fresh.towers; g.enemies = fresh.enemies; g.shots = fresh.shots; paint(); }
 
@@ -853,6 +901,18 @@ function bootImages() {
 }
 
 document.getElementById("go").onclick = begin;
+document.getElementById("open-board").onclick = () => {
+  boardOpen = true;
+  const nick = document.getElementById("nick");
+  if (document.activeElement !== nick) nick.value = save.nick === "지휘관" ? "" : save.nick;
+  renderBoard();
+  paint();
+};
+document.getElementById("close-board").onclick = () => { boardOpen = false; paint(); };
+document.getElementById("nick").addEventListener("input", () => {
+  save.nick = document.getElementById("nick").value.trim().slice(0, 8) || "지휘관";
+  writeSave(save);
+});
 for (const b of document.querySelectorAll("#diff button")) b.onclick = () => { difficulty = b.dataset.diff; g.difficulty = difficulty; save.difficulty = difficulty; writeSave(save); paint(); };
 document.getElementById("menu").onclick = (e) => { if (e.target.id === "menu") begin(); };
 document.getElementById("again").onclick = restart;
