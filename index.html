@@ -184,7 +184,8 @@ window.ART=Object.assign(window.ART||{},{"tower-rifle":"data:image/webp;base64,U
 </script>
 <script>
 const COLS = 6, ROWS = 10, START_GOLD = 145, START_LIVES = 20, SELL_RATIO = 0.6, PERFECT_BONUS = 25, MAX_RANK = 3;
-const DMG_MUL = 1.42, RATE_MUL = 0.8, DMG_COST = [50, 90, 140], RATE_COST = [45, 80, 125];
+const DMG_MUL = 1.42, RATE_MUL = 0.8, DMG_COST = [50, 90, 140], RATE_COST = [45, 80, 125], COST_STEP = 0.05;
+function scaledCost(base, n) { return Math.max(1, Math.round(base * (1 + COST_STEP * n))); }
 const ENEMY_COUNT_MUL = 2, ENEMY_HP_MUL = 1.3, ENEMY_SPEED_STEP = 0.02;
 const DIFF_HP = { easy: 1, normal: 1.25, hard: 1.6 };
 const PATH = [[1,0],[1,1],[1,2],[2,2],[3,2],[4,2],[4,3],[4,4],[3,4],[2,4],[1,4],[1,5],[1,6],[2,6],[3,6],[4,6],[4,7],[4,8],[3,8],[2,8],[2,9]];
@@ -406,10 +407,11 @@ function onCell(g, x, y) {
   const occ = occupied(g, x, y);
   if (occ) { g.selected = g.selected === occ.id && !g.armed ? null : occ.id; g.armed = null; return; }
   if (g.armed) {
-    if (!canBuild(g, x, y) || g.gold < TOWERS[g.armed].cost) { g.flashes.push({ gx: x, gy: y, life: 0.32 }); sfx.error(); return; }
+    if (!canBuild(g, x, y) || g.gold < scaledCost(TOWERS[g.armed].cost, g.towers.length)) { g.flashes.push({ gx: x, gy: y, life: 0.32 }); sfx.error(); return; }
     const def = TOWERS[g.armed];
-    g.gold -= def.cost;
-    g.towers.push({ id: g.nextId++, kind: g.armed, gx: x, gy: y, dmgRank: 0, rateRank: 0, target: "first", cooldown: Math.random() * def.interval, recoil: 0, invested: def.cost });
+    const price = scaledCost(def.cost, g.towers.length);
+    g.gold -= price;
+    g.towers.push({ id: g.nextId++, kind: g.armed, gx: x, gy: y, dmgRank: 0, rateRank: 0, target: "first", cooldown: Math.random() * def.interval, recoil: 0, invested: price });
     burst(g, x + 0.5, y + 0.5, "#9fd4ff", 8, 1.1); sfx.place(); return;
   }
   g.selected = null;
@@ -534,7 +536,7 @@ function draw(ctx, g, art) {
     }
   }
   if (g.armed && g.hover && g.phase !== "menu" && g.phase !== "victory" && g.phase !== "defeat") {
-    const ok = canBuild(g, g.hover.gx, g.hover.gy) && g.gold >= TOWERS[g.armed].cost;
+    const ok = canBuild(g, g.hover.gx, g.hover.gy) && g.gold >= scaledCost(TOWERS[g.armed].cost, g.towers.length);
     const c = center(g.hover.gx, g.hover.gy);
     ctx.fillStyle = ok ? "rgba(58,160,255,0.18)" : "rgba(214,69,122,0.28)";
     ctx.fillRect(ox + g.hover.gx * cell, oy + g.hover.gy * cell, cell, cell);
@@ -755,8 +757,10 @@ function paint() {
     : "1. 아래 포탑을 고르고 2. 노란 원을 누른 뒤 3. 플레이를 누르세요";
   for (const id of ORDER) {
     const btn = document.getElementById("t-" + id);
+    const price = scaledCost(TOWERS[id].cost, g.towers.length);
+    btn.querySelector("em").textContent = price;
     btn.dataset.on = g.armed === id ? "true" : "false";
-    btn.dataset.poor = g.gold < TOWERS[id].cost ? "true" : "false";
+    btn.dataset.poor = g.gold < price ? "true" : "false";
     btn.disabled = paused;
   }
   if (sel) {
@@ -766,10 +770,12 @@ function paint() {
     document.getElementById("up-stats").textContent = "공격 " + Math.round(st.damage) + " · 연사 " + (1 / st.interval).toFixed(1) + "/초";
     document.getElementById("up-target").textContent = TARGET_LABEL[sel.target];
     const dmg = document.getElementById("up-dmg"), rate = document.getElementById("up-rate");
-    dmg.disabled = paused || sel.dmgRank >= MAX_RANK || g.gold < (DMG_COST[sel.dmgRank] || 0);
-    rate.disabled = paused || sel.rateRank >= MAX_RANK || g.gold < (RATE_COST[sel.rateRank] || 0);
-    dmg.querySelector("span").textContent = "공격력 " + (sel.dmgRank >= MAX_RANK ? "최대" : DMG_COST[sel.dmgRank]);
-    rate.querySelector("span").textContent = "연사 " + (sel.rateRank >= MAX_RANK ? "최대" : RATE_COST[sel.rateRank]);
+    const dmgCost = sel.dmgRank >= MAX_RANK ? 0 : scaledCost(DMG_COST[sel.dmgRank], g.towers.length);
+    const rateCost = sel.rateRank >= MAX_RANK ? 0 : scaledCost(RATE_COST[sel.rateRank], g.towers.length);
+    dmg.disabled = paused || sel.dmgRank >= MAX_RANK || g.gold < dmgCost;
+    rate.disabled = paused || sel.rateRank >= MAX_RANK || g.gold < rateCost;
+    dmg.querySelector("span").textContent = "공격력 " + (sel.dmgRank >= MAX_RANK ? "최대" : dmgCost);
+    rate.querySelector("span").textContent = "연사 " + (sel.rateRank >= MAX_RANK ? "최대" : rateCost);
     document.getElementById("up-sell").textContent = "판매 +" + refundOf(sel);
     paintPips("pips-dmg", sel.dmgRank); paintPips("pips-rate", sel.rateRank);
     document.getElementById("up-img").src = artURL("tower-" + sel.kind);
@@ -842,8 +848,9 @@ function upgrade(kind) {
   if (paused) return;
   const t = g.towers.find((x) => x.id === g.selected); if (!t) return;
   const rank = kind === "dmg" ? t.dmgRank : t.rateRank, costs = kind === "dmg" ? DMG_COST : RATE_COST;
-  if (rank >= MAX_RANK || g.gold < costs[rank]) { sfx.error(); return; }
-  g.gold -= costs[rank]; t.invested += costs[rank]; if (kind === "dmg") t.dmgRank++; else t.rateRank++; sfx.place(); paint();
+  const price = scaledCost(costs[rank] || 0, g.towers.length);
+  if (rank >= MAX_RANK || g.gold < price) { sfx.error(); return; }
+  g.gold -= price; t.invested += price; if (kind === "dmg") t.dmgRank++; else t.rateRank++; sfx.place(); paint();
 }
 for (const id of ORDER) document.getElementById("t-" + id).onclick = () => { sfx.unlock(); if (paused || g.phase === "menu" || g.phase === "victory" || g.phase === "defeat") return; g.armed = g.armed === id ? null : id; g.selected = null; paint(); };
 canvas.addEventListener("pointerdown", (e) => { if (paused) return; sfx.unlock(); canvas.setPointerCapture(e.pointerId); pending = cellFromPointer(e, canvas); g.hover = pending; });
