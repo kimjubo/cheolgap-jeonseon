@@ -24,7 +24,7 @@
   .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 4px; padding: 0 4px 6px; }
   .icon { min-width: 44px; height: 44px; padding: 0 8px; border-radius: 12px; border: 3px solid var(--border); background: var(--surface-2); box-shadow: 0 3px 0 var(--ink); font-size: 13px; font-weight: 700; white-space: nowrap; }
   .icon:active, .btn:active:not(:disabled), .plate.tower:active { transform: translateY(2px); }
-  #pause { justify-content: center; background: rgb(16 24 32 / .72); }
+  #pause { position: fixed; z-index: 20; justify-content: center; align-items: center; background: rgb(16 24 32 / .72); }
   #pause .card { width: min(100%, 320px); text-align: center; display: flex; flex-direction: column; gap: 10px; }
   #stage { position: relative; flex: 1; min-height: 0; }
   canvas { width: 100%; height: 100%; display: block; touch-action: none; }
