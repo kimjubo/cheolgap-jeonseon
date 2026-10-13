@@ -1,7 +1,7 @@
 const COLS = 6, ROWS = 10, START_GOLD = 145, START_LIVES = 20, SELL_RATIO = 0.6, PERFECT_BONUS = 25, MAX_RANK = 3;
 const DMG_MUL = 1.42, RATE_MUL = 0.8, DMG_COST = [50, 90, 140], RATE_COST = [45, 80, 125];
 const ENEMY_COUNT_MUL = 2, ENEMY_HP_MUL = 1.3, ENEMY_SPEED_STEP = 0.02;
-const DIFF_HP = { easy: 1, normal: 2, hard: 4 };
+const DIFF_HP = { easy: 1, normal: 2, hard: 3 };
 const PATH = [[1,0],[1,1],[1,2],[2,2],[3,2],[4,2],[4,3],[4,4],[3,4],[2,4],[1,4],[1,5],[1,6],[2,6],[3,6],[4,6],[4,7],[4,8],[3,8],[2,8],[2,9]];
 const PATH_KEY = new Set(PATH.map(([x, y]) => x + y * COLS));
 const BLOCKED = new Set([0, 5, (ROWS - 1) * COLS, (ROWS - 1) * COLS + COLS - 1]);
