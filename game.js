@@ -234,12 +234,15 @@ const SHOT_FRAME = { bullet: 0, missile: 1, shell: 2, flame: 3 };
 const boardCache = { key: "", canvas: null };
 let view = { w: 300, h: 400, dpr: 1, cell: 40, ox: 0, oy: 0 };
 function layout(w, h, dpr) {
-  const pad = 10, cell = Math.max(8, Math.min((w - pad * 2) / COLS, (h - pad * 2) / ROWS));
-  view = { w, h, dpr, cell, ox: (w - cell * COLS) / 2, oy: (h - cell * ROWS) / 2 };
+  const pad = 4, cell = Math.max(8, Math.min((w - pad * 2) / COLS, (h - pad * 2) / ROWS));
+  view = { w, h, dpr, cell, ox: Math.round((w - cell * COLS) / 2), oy: Math.round((h - cell * ROWS) / 2) };
 }
 function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); roundRectPath(ctx, x, y, w, h, r);
+}
+function roundRectPath(ctx, x, y, w, h, r) {
   const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.arcTo(x + w, y, x + w, y + h, radius); ctx.arcTo(x + w, y + h, x, y + h, radius); ctx.arcTo(x, y + h, x, y, radius); ctx.arcTo(x, y, x + w, y, radius); ctx.closePath();
+  ctx.moveTo(x + radius, y); ctx.arcTo(x + w, y, x + w, y + h, radius); ctx.arcTo(x + w, y + h, x, y + h, radius); ctx.arcTo(x, y + h, x, y, radius); ctx.arcTo(x, y, x + w, y, radius); ctx.closePath();
 }
 function blit(ctx, img, cx, cy, h) { if (!img) return; const w = h * (img.width / img.height); ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h); }
 function blitFrame(ctx, img, frame, cx, cy, size) {
@@ -249,6 +252,28 @@ function blitFrame(ctx, img, frame, cx, cy, size) {
 }
 const center = (gx, gy) => ({ x: view.ox + (gx + 0.5) * view.cell, y: view.oy + (gy + 0.5) * view.cell });
 function shadow(ctx, x, y, rx, ry) { ctx.fillStyle = "rgba(40,24,16,0.28)"; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); }
+function hash2(x, y) { let n = (x * 374761393 + y * 668265263) | 0; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
+function paintSurroundings(ctx, art) {
+  const { w, h, cell, ox, oy } = view, bw = COLS * cell, bh = ROWS * cell;
+  const pattern = art.ground && ctx.createPattern(art.ground, "repeat");
+  if (pattern) {
+    const s = (cell * 2.5) / art.ground.width;
+    pattern.setTransform(new DOMMatrix().translate(ox, oy).scale(s));
+    ctx.fillStyle = pattern;
+  } else ctx.fillStyle = "#e4c48a";
+  ctx.fillRect(0, 0, w, h);
+  const x0 = Math.floor(-ox / cell) - 1, x1 = Math.ceil((w - ox) / cell), y0 = Math.floor(-oy / cell) - 1, y1 = Math.ceil((h - oy) / cell);
+  for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) {
+    if (gx >= -1 && gx <= COLS && gy >= -1 && gy <= ROWS) continue;
+    const r = hash2(gx, gy);
+    if (r > 0.2) continue;
+    const jx = (hash2(gx + 91, gy) - 0.5) * 0.5, jy = (hash2(gx, gy + 57) - 0.5) * 0.5, size = cell * (0.7 + hash2(gx + 13, gy + 29) * 0.5);
+    const p = { x: ox + (gx + 0.5 + jx) * cell, y: oy + (gy + 0.5 + jy) * cell };
+    shadow(ctx, p.x, p.y + size * 0.17, size * 0.27, size * 0.1); blit(ctx, art.rock, p.x, p.y, size);
+  }
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, w, h); roundRectPath(ctx, ox - 2, oy - 2, bw + 4, bh + 4, 14);
+  ctx.fillStyle = "rgba(16,24,32,0.3)"; ctx.fill("evenodd"); ctx.restore();
+}
 function paintBoard(art) {
   const key = [view.w, view.h, view.dpr, Math.round(view.cell * 10), art.ground ? 1 : 0].join("|");
   if (boardCache.canvas && boardCache.key === key) return boardCache.canvas;
@@ -256,8 +281,8 @@ function paintBoard(art) {
   canvas.width = Math.max(1, Math.round(view.w * view.dpr)); canvas.height = Math.max(1, Math.round(view.h * view.dpr));
   const ctx = canvas.getContext("2d"); ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
   const { cell, ox, oy } = view;
+  paintSurroundings(ctx, art);
   ctx.save(); roundRect(ctx, ox - 2, oy - 2, COLS * cell + 4, ROWS * cell + 4, 14); ctx.clip();
-  if (art.ground) ctx.drawImage(art.ground, ox, oy, COLS * cell, ROWS * cell); else { ctx.fillStyle = "#e4c48a"; ctx.fillRect(ox, oy, COLS * cell, ROWS * cell); }
   ctx.save(); ctx.beginPath();
   for (const [gx, gy] of PATH) ctx.rect(ox + gx * cell - 0.5, oy + gy * cell - 0.5, cell + 1, cell + 1);
   ctx.clip();
