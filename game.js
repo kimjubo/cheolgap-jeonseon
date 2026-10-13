@@ -367,12 +367,20 @@ const sfx = (() => {
   let bgmBuf = null, bgmSrc = null, bgmLoading = false, bgmWanted = false;
   const BGM_URL = "audio/metal-bgm.ogg";
   const BGM_GAIN = 0.32;
+  const SFX_GAIN = 5;
+  function limiter(threshold, ratio) {
+    const c = ctx.createDynamicsCompressor();
+    c.threshold.value = threshold; c.knee.value = 6; c.ratio.value = ratio; c.attack.value = 0.003; c.release.value = 0.15;
+    return c;
+  }
   function unlock() {
     const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
     if (!ctx) {
       ctx = new C();
-      master = ctx.createGain(); master.gain.value = muted ? 0 : 0.7; master.connect(ctx.destination);
-      sfxBus = ctx.createGain(); sfxBus.gain.value = 1; sfxBus.connect(master);
+      const out = limiter(-3, 20); out.connect(ctx.destination);
+      master = ctx.createGain(); master.gain.value = muted ? 0 : 0.7; master.connect(out);
+      const sfxLimit = limiter(-10, 12); sfxLimit.connect(master);
+      sfxBus = ctx.createGain(); sfxBus.gain.value = SFX_GAIN; sfxBus.connect(sfxLimit);
       bgmBus = ctx.createGain(); bgmBus.gain.value = BGM_GAIN; bgmBus.connect(master);
       const len = (ctx.sampleRate * 0.3) | 0; noise = ctx.createBuffer(1, len, ctx.sampleRate); const d = noise.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -427,9 +435,9 @@ const sfx = (() => {
       if (master && ctx) master.gain.setTargetAtTime(v ? 0 : 0.7, ctx.currentTime, 0.03);
       if (v) stopBgm(); else if (bgmWanted) ensureBgm();
     },
-    shot(k) { if (k === "bullet") { tone(740, 0.06, "square", 0.05); noiseHit(0.05, 0.04, 2200); } else if (k === "flame") noiseHit(0.09, 0.05, 900); else if (k === "missile") tone(320, 0.16, "sawtooth", 0.05, 140); else { noiseHit(0.22, 0.1, 280); tone(90, 0.2, "sine", 0.07, 48); } },
-    hit(k) { if (k === "shell") noiseHit(0.16, 0.06, 400); else tone(180, 0.04, "square", 0.03); },
-    kill() { tone(880, 0.07, "sine", 0.05); tone(1320, 0.1, "sine", 0.04); },
+    shot(k) { if (k === "bullet") { tone(740, 0.06, "square", 0.05); noiseHit(0.05, 0.04, 2200); } else if (k === "flame") noiseHit(0.09, 0.15, 900); else if (k === "missile") tone(320, 0.16, "sawtooth", 0.05, 140); else { noiseHit(0.22, 0.1, 280); tone(90, 0.2, "sine", 0.07, 48); } },
+    hit(k) { if (k === "shell") noiseHit(0.16, 0.06, 400); else tone(180, 0.04, "square", 0.045); },
+    kill() { tone(880, 0.07, "sine", 0.07); tone(1320, 0.1, "sine", 0.055); },
     leak() { tone(220, 0.28, "sawtooth", 0.06, 70); }, place() { tone(520, 0.07, "square", 0.05); },
     error() { tone(140, 0.12, "square", 0.05); }, wave() { tone(196, 0.16, "triangle", 0.06); tone(294, 0.2, "triangle", 0.05); },
     perfect() { tone(523, 0.1, "triangle", 0.05); tone(784, 0.16, "triangle", 0.05); },
