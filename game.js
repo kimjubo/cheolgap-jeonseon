@@ -363,32 +363,70 @@ function cellFromPointer(ev, canvas) {
 }
 
 const sfx = (() => {
-  let ctx, master, voices = 0, noise, muted = false, next = 0, stepN = 0;
+  let ctx, master, sfxBus, bgmBus, voices = 0, noise, muted = false;
+  let bgmBuf = null, bgmSrc = null, bgmLoading = false, bgmWanted = false;
+  const BGM_URL = "audio/metal-bgm.ogg";
+  const BGM_GAIN = 0.32;
   function unlock() {
     const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
     if (!ctx) {
-      ctx = new C(); master = ctx.createGain(); master.gain.value = muted ? 0 : 0.7; master.connect(ctx.destination);
+      ctx = new C();
+      master = ctx.createGain(); master.gain.value = muted ? 0 : 0.7; master.connect(ctx.destination);
+      sfxBus = ctx.createGain(); sfxBus.gain.value = 1; sfxBus.connect(master);
+      bgmBus = ctx.createGain(); bgmBus.gain.value = BGM_GAIN; bgmBus.connect(master);
       const len = (ctx.sampleRate * 0.3) | 0; noise = ctx.createBuffer(1, len, ctx.sampleRate); const d = noise.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     }
     if (ctx.state === "suspended") ctx.resume();
+    bgmWanted = true;
+    ensureBgm();
+  }
+  function ensureBgm() {
+    if (!ctx || !bgmWanted || muted) return;
+    if (bgmSrc) return;
+    if (bgmBuf) { startBgm(); return; }
+    if (bgmLoading) return;
+    bgmLoading = true;
+    fetch(BGM_URL).then((r) => {
+      if (!r.ok) throw new Error("bgm " + r.status);
+      return r.arrayBuffer();
+    }).then((ab) => ctx.decodeAudioData(ab.slice(0))).then((buf) => {
+      bgmBuf = buf; bgmLoading = false; if (bgmWanted && !muted) startBgm();
+    }).catch(() => { bgmLoading = false; });
+  }
+  function startBgm() {
+    if (!ctx || !bgmBuf || bgmSrc || muted) return;
+    const src = ctx.createBufferSource();
+    src.buffer = bgmBuf; src.loop = true; src.loopStart = 0; src.loopEnd = bgmBuf.duration;
+    src.connect(bgmBus); src.start(0); bgmSrc = src;
+  }
+  function stopBgm() {
+    if (!bgmSrc) return;
+    try { bgmSrc.stop(); } catch (_) {}
+    try { bgmSrc.disconnect(); } catch (_) {}
+    bgmSrc = null;
   }
   function tone(freq, dur, type, peak, slide) {
     if (!ctx || voices > 12) return;
     const o = ctx.createOscillator(), g = ctx.createGain(), now = ctx.currentTime;
     o.type = type; o.frequency.setValueAtTime(freq, now); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, slide), now + dur);
     g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(Math.max(0.001, peak), now + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    o.connect(g); g.connect(master); voices++; o.onended = () => { voices = Math.max(0, voices - 1); }; o.start(); o.stop(now + dur + 0.02);
+    o.connect(g); g.connect(sfxBus || master); voices++; o.onended = () => { voices = Math.max(0, voices - 1); }; o.start(); o.stop(now + dur + 0.02);
   }
   function noiseHit(dur, peak, freq) {
     if (!ctx || !noise || voices > 12) return;
     const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), now = ctx.currentTime;
     src.buffer = noise; f.type = "lowpass"; f.frequency.value = freq;
     g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(peak, now + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(f); f.connect(g); g.connect(master); voices++; src.onended = () => { voices = Math.max(0, voices - 1); }; src.start(); src.stop(now + dur);
+    src.connect(f); f.connect(g); g.connect(sfxBus || master); voices++; src.onended = () => { voices = Math.max(0, voices - 1); }; src.start(); src.stop(now + dur);
   }
   return {
-    unlock, setMuted(v) { muted = v; if (master && ctx) master.gain.setTargetAtTime(v ? 0 : 0.7, ctx.currentTime, 0.03); },
+    unlock,
+    setMuted(v) {
+      muted = v;
+      if (master && ctx) master.gain.setTargetAtTime(v ? 0 : 0.7, ctx.currentTime, 0.03);
+      if (v) stopBgm(); else if (bgmWanted) ensureBgm();
+    },
     shot(k) { if (k === "bullet") { tone(740, 0.06, "square", 0.05); noiseHit(0.05, 0.04, 2200); } else if (k === "flame") noiseHit(0.09, 0.05, 900); else if (k === "missile") tone(320, 0.16, "sawtooth", 0.05, 140); else { noiseHit(0.22, 0.1, 280); tone(90, 0.2, "sine", 0.07, 48); } },
     hit(k) { if (k === "shell") noiseHit(0.16, 0.06, 400); else tone(180, 0.04, "square", 0.03); },
     kill() { tone(880, 0.07, "sine", 0.05); tone(1320, 0.1, "sine", 0.04); },
@@ -397,11 +435,7 @@ const sfx = (() => {
     perfect() { tone(523, 0.1, "triangle", 0.05); tone(784, 0.16, "triangle", 0.05); },
     win() { tone(523, 0.14, "triangle", 0.06); tone(784, 0.22, "triangle", 0.07); },
     lose() { tone(196, 0.3, "sawtooth", 0.06, 80); },
-    pump() {
-      if (!ctx || muted) return; if (!next) next = ctx.currentTime + 0.05;
-      const notes = [98, 116.54, 130.81, 146.83, 130.81, 116.54];
-      while (next < ctx.currentTime + 0.2 && voices < 8) { tone(notes[stepN++ % notes.length], 0.22, "sine", 0.035); next += 0.36; }
-    },
+    pump() { if (bgmWanted && !muted) ensureBgm(); },
   };
 })();
 
