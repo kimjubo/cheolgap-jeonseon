@@ -1,5 +1,5 @@
 const COLS = 6, ROWS = 10, START_GOLD = 145, START_LIVES = 20, SELL_RATIO = 0.6, PERFECT_BONUS = 25, MAX_RANK = 3;
-const DMG_MUL = 1.42, RATE_MUL = 0.8, DMG_COST = [50, 90, 140], RATE_COST = [45, 80, 125], COST_STEP = 0.05;
+const DMG_MUL = 1.42, RATE_MUL = 0.8, DMG_COST = [50, 90, 140], RATE_COST = [45, 80, 125], COST_STEP = 0.1;
 function scaledCost(base, n) { return Math.max(1, Math.round(base * (1 + COST_STEP * n))); }
 const ENEMY_COUNT_MUL = 2, ENEMY_HP_MUL = 1.3, ENEMY_SPEED_STEP = 0.02;
 const DIFF_HP = { easy: 1, normal: 1.25, hard: 1.6 };
