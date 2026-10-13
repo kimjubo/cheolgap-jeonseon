@@ -66,29 +66,44 @@ function blankSave() { return { version: 1, bestWave: 0, bestKills: 0, muted: fa
 function cleanBoard(rows) {
   if (!Array.isArray(rows)) return [];
   return rows.filter((r) => r && Number.isFinite(+r.gold)).map((r) => ({
-    name: String(r.name || "지휘관").trim().slice(0, 8) || "지휘관",
+    name: String(r.name || "지휘관").trim().slice(0, 10) || "지휘관",
     gold: r.gold | 0,
     kills: r.kills | 0,
     difficulty: diffName(r.difficulty),
     at: r.at | 0,
-  })).sort((a, b) => b.gold - a.gold || b.kills - a.kills || b.at - a.at).slice(0, 20);
+  })).sort((a, b) => b.gold - a.gold || b.kills - a.kills || b.at - a.at).slice(0, 10);
 }
 function loadSave() {
   try {
     const p = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
     if (!p || p.version !== 1) return blankSave();
-    return { version: 1, bestWave: p.bestWave | 0, bestKills: p.bestKills | 0, muted: !!p.muted, difficulty: diffName(p.difficulty), nick: String(p.nick || "지휘관").trim().slice(0, 8) || "지휘관", board: cleanBoard(p.board) };
+    return { version: 1, bestWave: p.bestWave | 0, bestKills: p.bestKills | 0, muted: !!p.muted, difficulty: diffName(p.difficulty), nick: String(p.nick || "지휘관").trim().slice(0, 10) || "지휘관", board: cleanBoard(p.board) };
   } catch { return blankSave(); }
 }
 function writeSave(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch { /* ignore */ } }
 const DIFF_LABEL = { easy: "쉬움", normal: "보통", hard: "어려움" };
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => "\u0026" + ({ "&": "amp", "<": "lt", ">": "gt", '"': "quot" }[c]) + ";"); }
+function typedName() {
+  const el = document.getElementById("clear-name");
+  return ((el && el.value) || "").trim().slice(0, 10);
+}
 function recordBoard(g) {
   if (g.boarded || g.phase !== "victory") return;
   g.boarded = true;
-  const row = { name: (save.nick || "지휘관").trim().slice(0, 8) || "지휘관", gold: g.gold | 0, kills: g.kills | 0, difficulty: diffName(g.difficulty), at: Date.now() };
-  save.board = cleanBoard(save.board.concat(row)).sort((a, b) => b.gold - a.gold || b.kills - a.kills || b.at - a.at).slice(0, 20);
+  const row = { name: typedName() || "지휘관", gold: g.gold | 0, kills: g.kills | 0, difficulty: diffName(g.difficulty), at: Date.now() };
+  g.boardAt = row.at;
+  save.board = cleanBoard(save.board.concat(row));
   g.boardRank = save.board.findIndex((r) => r.at === row.at) + 1;
+  writeSave(save);
+}
+function renameEntry() {
+  if (g.phase !== "victory" || !g.boardAt) return;
+  const row = save.board.find((r) => r.at === g.boardAt);
+  if (!row) return;
+  row.name = typedName() || "지휘관";
+  save.nick = row.name;
+  save.board = cleanBoard(save.board);
+  g.boardRank = save.board.findIndex((r) => r.at === g.boardAt) + 1;
   writeSave(save);
 }
 function renderBoard() {
@@ -101,7 +116,7 @@ let boardOpen = false;
 
 let difficulty = "easy";
 function newGame() {
-  return { phase: "menu", difficulty, time: 0, gold: START_GOLD, lives: START_LIVES, waveCursor: 0, activeWave: -1, kills: 0, leaksThisWave: 0, boostNext: false, boarded: false, boardRank: 0, speed: 1, towers: [], enemies: [], shots: [], particles: [], floaters: [], puffs: [], jobs: [], flashes: [], selected: null, armed: null, hover: null, shake: 0, announce: null, nextId: 1 };
+  return { phase: "menu", difficulty, time: 0, gold: START_GOLD, lives: START_LIVES, waveCursor: 0, activeWave: -1, kills: 0, leaksThisWave: 0, boostNext: false, boarded: false, boardRank: 0, boardAt: 0, speed: 1, towers: [], enemies: [], shots: [], particles: [], floaters: [], puffs: [], jobs: [], flashes: [], selected: null, armed: null, hover: null, shake: 0, announce: null, nextId: 1 };
 }
 function towerRuntime(t) {
   const b = TOWERS[t.kind];
@@ -595,7 +610,9 @@ function paint() {
   if (g.phase === "victory" || g.phase === "defeat") {
     document.getElementById("end-kicker").textContent = g.phase === "victory" ? "승리" : "패배";
     document.getElementById("end-title").textContent = g.phase === "victory" ? "전선 사수" : "전선 붕괴";
-    document.getElementById("end-copy").textContent = g.phase === "victory" ? "스무 번의 파도를 모두 막아냈습니다." + (g.boardRank ? " 남은 광물 " + g.boardRank + "위." : "") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
+    document.getElementById("end-copy").textContent = g.phase === "victory" ? (g.boardRank ? "스무 번의 파도를 모두 막아냈습니다. 남은 광물 " + g.boardRank + "위. 이름을 남겨 주세요." : "스무 번의 파도를 모두 막아냈습니다. 상위 10명에는 들지 못했습니다.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
+    const endNick = document.getElementById("end-nick");
+    if (endNick) endNick.hidden = !(g.phase === "victory" && g.boardRank);
     document.getElementById("end-lives").textContent = g.lives;
     document.getElementById("end-gold").textContent = g.gold;
     document.getElementById("end-kills").textContent = g.kills;
@@ -688,20 +705,11 @@ function bootImages() {
 
 document.getElementById("go").onclick = begin;
 const openBoard = document.getElementById("open-board");
-if (openBoard) openBoard.onclick = () => {
-  boardOpen = true;
-  const nick = document.getElementById("nick");
-  if (nick && document.activeElement !== nick) nick.value = save.nick === "지휘관" ? "" : save.nick;
-  renderBoard();
-  paint();
-};
+if (openBoard) openBoard.onclick = () => { boardOpen = true; renderBoard(); paint(); };
 const closeBoard = document.getElementById("close-board");
 if (closeBoard) closeBoard.onclick = () => { boardOpen = false; paint(); };
-const nickInput = document.getElementById("nick");
-if (nickInput) nickInput.addEventListener("input", () => {
-  save.nick = nickInput.value.trim().slice(0, 8) || "지휘관";
-  writeSave(save);
-});
+const clearName = document.getElementById("clear-name");
+if (clearName) clearName.addEventListener("input", () => { renameEntry(); const copy = document.getElementById("end-copy"); if (copy) copy.textContent = g.boardRank ? "스무 번의 파도를 모두 막아냈습니다. 남은 광물 " + g.boardRank + "위. 이름을 남겨 주세요." : "스무 번의 파도를 모두 막아냈습니다. 상위 10명에는 들지 못했습니다."; });
 for (const b of document.querySelectorAll("#diff button")) b.onclick = () => { difficulty = b.dataset.diff; g.difficulty = difficulty; save.difficulty = difficulty; writeSave(save); paint(); };
 document.getElementById("menu").onclick = (e) => { if (e.target.id === "menu") begin(); };
 document.getElementById("again").onclick = restart;
