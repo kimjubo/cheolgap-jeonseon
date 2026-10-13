@@ -452,6 +452,14 @@ function enemyCount() {
   for (const j of g.jobs) n += j.left;
   return n;
 }
+let paused = false;
+function canPause() { return g.phase === "prep" || g.phase === "combat"; }
+function setPaused(v) {
+  if (v && !canPause()) return;
+  paused = !!v;
+  if (paused) { g.armed = null; g.selected = null; }
+  paint();
+}
 function paint() {
   const lives = document.getElementById("lives"), gold = document.getElementById("gold"), wave = document.getElementById("wave"), kills = document.getElementById("kills");
   lives.textContent = g.lives; gold.textContent = g.gold; kills.textContent = "처치 " + g.kills;
@@ -460,7 +468,11 @@ function paint() {
   document.getElementById("speed").textContent = g.speed === 1 ? "×1" : "×2";
   document.getElementById("menu").hidden = g.phase !== "menu";
   document.getElementById("end").hidden = g.phase !== "victory" && g.phase !== "defeat";
+  document.getElementById("pause").hidden = !paused;
   document.getElementById("dock").hidden = g.phase !== "prep" && g.phase !== "combat";
+  const pauseBtn = document.getElementById("pause-btn");
+  pauseBtn.disabled = !canPause();
+  pauseBtn.textContent = "일시정지";
   const best = document.getElementById("best");
   best.hidden = save.bestWave <= 0;
   best.textContent = "최고 기록 " + save.bestWave + "파도 · 처치 " + save.bestKills;
@@ -473,18 +485,19 @@ function paint() {
     document.getElementById("end-kills").textContent = g.kills;
   }
   const play = document.getElementById("play");
-  play.disabled = g.phase !== "prep";
+  play.disabled = paused || g.phase !== "prep";
   play.textContent = g.phase === "prep" ? "플레이 · 제 " + (g.waveCursor + 1) + " 파도" : "교전 중 · 적 " + enemyCount();
   const preview = document.getElementById("preview");
   preview.textContent = g.phase === "prep" && WAVES[g.waveCursor] ? WAVES[g.waveCursor].map((w) => ENEMIES[w.type].name + " " + w.count).join(" · ") : "";
   const sel = g.selected != null ? g.towers.find((t) => t.id === g.selected) : null;
   document.getElementById("shop").hidden = !!sel;
   document.getElementById("up").hidden = !sel;
-  document.getElementById("coach").hidden = !(g.towers.length === 0 && g.phase === "prep");
+  document.getElementById("coach").hidden = !(g.towers.length === 0 && g.phase === "prep" && !paused);
   for (const id of ORDER) {
     const btn = document.getElementById("t-" + id);
     btn.dataset.on = g.armed === id ? "true" : "false";
     btn.dataset.poor = g.gold < TOWERS[id].cost ? "true" : "false";
+    btn.disabled = paused;
   }
   if (sel) {
     const st = towerRuntime(sel);
@@ -493,8 +506,8 @@ function paint() {
     document.getElementById("up-stats").textContent = "공격 " + Math.round(st.damage) + " · 연사 " + (1 / st.interval).toFixed(1) + "/초";
     document.getElementById("up-target").textContent = TARGET_LABEL[sel.target];
     const dmg = document.getElementById("up-dmg"), rate = document.getElementById("up-rate");
-    dmg.disabled = sel.dmgRank >= MAX_RANK || g.gold < (DMG_COST[sel.dmgRank] || 0);
-    rate.disabled = sel.rateRank >= MAX_RANK || g.gold < (RATE_COST[sel.rateRank] || 0);
+    dmg.disabled = paused || sel.dmgRank >= MAX_RANK || g.gold < (DMG_COST[sel.dmgRank] || 0);
+    rate.disabled = paused || sel.rateRank >= MAX_RANK || g.gold < (RATE_COST[sel.rateRank] || 0);
     dmg.querySelector("span").textContent = "공격력 " + (sel.dmgRank >= MAX_RANK ? "최대" : DMG_COST[sel.dmgRank]);
     rate.querySelector("span").textContent = "연사 " + (sel.rateRank >= MAX_RANK ? "최대" : RATE_COST[sel.rateRank]);
     document.getElementById("up-sell").textContent = "판매 +" + refundOf(sel);
@@ -510,9 +523,13 @@ function artURL(name) { return (window.ART && window.ART[name]) || ""; }
 function measure() { const r = wrap.getBoundingClientRect(); box.w = r.width; box.h = r.height; }
 function frame(now) {
   const raw = Math.min(0.05, (now - last) / 1000); last = now;
-  acc += raw * (g.phase === "combat" ? g.speed : 1); if (acc > 0.2) acc = 0.2;
   let changed = false;
-  while (acc >= 1 / 60) { const before = g.phase + g.gold + g.lives + g.kills; step(g, 1 / 60); acc -= 1 / 60; if (before !== g.phase + g.gold + g.lives + g.kills) changed = true; }
+  if (!paused) {
+    acc += raw * (g.phase === "combat" ? g.speed : 1); if (acc > 0.2) acc = 0.2;
+    while (acc >= 1 / 60) { const before = g.phase + g.gold + g.lives + g.kills; step(g, 1 / 60); acc -= 1 / 60; if (before !== g.phase + g.gold + g.lives + g.kills) changed = true; }
+  } else {
+    acc = 0;
+  }
   if (box.w < 2) measure();
   if (box.w > 2 && box.h > 2) {
     const dpr = Math.min(1.5, window.devicePixelRatio || 1); layout(box.w, box.h, dpr);
@@ -523,11 +540,12 @@ function frame(now) {
   sfx.pump();
   const reached = g.phase === "victory" ? WAVES.length : g.activeWave >= 0 ? g.activeWave + 1 : 0;
   if (reached > save.bestWave || g.kills > save.bestKills) { save.bestWave = Math.max(save.bestWave, reached); save.bestKills = Math.max(save.bestKills, g.kills); writeSave(save); changed = true; }
-  if (changed || g.phase === "menu" || g.phase === "prep") paint();
+  if (changed || g.phase === "menu" || g.phase === "prep" || paused) paint();
   requestAnimationFrame(frame);
 }
-function begin() { sfx.unlock(); if (g.phase === "menu") { g.phase = "prep"; sfx.wave(); } paint(); }
-function restart() { sfx.unlock(); const fresh = newGame(); Object.assign(g, fresh); g.phase = "prep"; g.towers = fresh.towers; g.enemies = fresh.enemies; g.shots = fresh.shots; paint(); }
+function begin() { sfx.unlock(); paused = false; if (g.phase === "menu") { g.phase = "prep"; sfx.wave(); } paint(); }
+function restart() { sfx.unlock(); paused = false; const fresh = newGame(); Object.assign(g, fresh); g.phase = "prep"; g.towers = fresh.towers; g.enemies = fresh.enemies; g.shots = fresh.shots; paint(); }
+function toMenu() { sfx.unlock(); paused = false; const fresh = newGame(); Object.assign(g, fresh); g.towers = fresh.towers; g.enemies = fresh.enemies; g.shots = fresh.shots; paint(); }
 
 function bootImages() {
   const names = ["ground", "creep", "rock", "fort", "hive", "shots", "burst", "tower-rifle", "tower-flame", "tower-missile", "tower-siege", "e-claw", "e-spit", "e-shell", "e-wing", "e-titan"];
@@ -547,25 +565,29 @@ function bootImages() {
 document.getElementById("go").onclick = begin;
 document.getElementById("menu").onclick = (e) => { if (e.target.id === "menu") begin(); };
 document.getElementById("again").onclick = restart;
-document.getElementById("play").onclick = () => { sfx.unlock(); startWave(g); paint(); };
+document.getElementById("play").onclick = () => { if (paused) return; sfx.unlock(); startWave(g); paint(); };
 document.getElementById("mute").onclick = () => { sfx.unlock(); save.muted = !save.muted; sfx.setMuted(save.muted); writeSave(save); document.getElementById("mute").textContent = save.muted ? "소리" : "음소거"; };
-document.getElementById("speed").onclick = () => { g.speed = g.speed === 1 ? 2 : 1; paint(); };
-document.getElementById("reset").onclick = restart;
-document.getElementById("up-target").onclick = () => { const t = g.towers.find((x) => x.id === g.selected); if (!t) return; t.target = t.target === "first" ? "close" : t.target === "close" ? "strong" : "first"; paint(); };
+document.getElementById("speed").onclick = () => { if (paused) return; g.speed = g.speed === 1 ? 2 : 1; paint(); };
+document.getElementById("pause-btn").onclick = () => { sfx.unlock(); if (!canPause()) return; setPaused(true); };
+document.getElementById("resume").onclick = () => { sfx.unlock(); setPaused(false); };
+document.getElementById("to-menu").onclick = toMenu;
+document.getElementById("up-target").onclick = () => { if (paused) return; const t = g.towers.find((x) => x.id === g.selected); if (!t) return; t.target = t.target === "first" ? "close" : t.target === "close" ? "strong" : "first"; paint(); };
 document.getElementById("up-dmg").onclick = () => upgrade("dmg");
 document.getElementById("up-rate").onclick = () => upgrade("rate");
-document.getElementById("up-close").onclick = () => { g.selected = null; paint(); };
-document.getElementById("up-sell").onclick = () => { const i = g.towers.findIndex((t) => t.id === g.selected); if (i < 0) return; g.gold += refundOf(g.towers[i]); g.towers.splice(i, 1); g.selected = null; paint(); };
+document.getElementById("up-close").onclick = () => { if (paused) return; g.selected = null; paint(); };
+document.getElementById("up-sell").onclick = () => { if (paused) return; const i = g.towers.findIndex((t) => t.id === g.selected); if (i < 0) return; g.gold += refundOf(g.towers[i]); g.towers.splice(i, 1); g.selected = null; paint(); };
 function upgrade(kind) {
+  if (paused) return;
   const t = g.towers.find((x) => x.id === g.selected); if (!t) return;
   const rank = kind === "dmg" ? t.dmgRank : t.rateRank, costs = kind === "dmg" ? DMG_COST : RATE_COST;
   if (rank >= MAX_RANK || g.gold < costs[rank]) { sfx.error(); return; }
   g.gold -= costs[rank]; t.invested += costs[rank]; if (kind === "dmg") t.dmgRank++; else t.rateRank++; sfx.place(); paint();
 }
-for (const id of ORDER) document.getElementById("t-" + id).onclick = () => { sfx.unlock(); if (g.phase === "menu" || g.phase === "victory" || g.phase === "defeat") return; g.armed = g.armed === id ? null : id; g.selected = null; paint(); };
-canvas.addEventListener("pointerdown", (e) => { sfx.unlock(); canvas.setPointerCapture(e.pointerId); pending = cellFromPointer(e, canvas); g.hover = pending; });
-canvas.addEventListener("pointermove", (e) => { g.hover = cellFromPointer(e, canvas); });
+for (const id of ORDER) document.getElementById("t-" + id).onclick = () => { sfx.unlock(); if (paused || g.phase === "menu" || g.phase === "victory" || g.phase === "defeat") return; g.armed = g.armed === id ? null : id; g.selected = null; paint(); };
+canvas.addEventListener("pointerdown", (e) => { if (paused) return; sfx.unlock(); canvas.setPointerCapture(e.pointerId); pending = cellFromPointer(e, canvas); g.hover = pending; });
+canvas.addEventListener("pointermove", (e) => { if (paused) return; g.hover = cellFromPointer(e, canvas); });
 canvas.addEventListener("pointerup", (e) => {
+  if (paused) { pending = null; return; }
   if (g.phase === "menu") { begin(); return; }
   const cell = cellFromPointer(e, canvas), start = pending; pending = null;
   if (!cell || !start || cell.gx !== start.gx || cell.gy !== start.gy) return;
@@ -573,8 +595,15 @@ canvas.addEventListener("pointerup", (e) => {
 });
 canvas.addEventListener("pointerleave", () => { g.hover = null; });
 window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    if (paused) setPaused(false);
+    else if (canPause()) setPaused(true);
+    else { g.armed = null; g.selected = null; paint(); }
+    return;
+  }
+  if (paused) return;
   if (e.key === " ") { e.preventDefault(); sfx.unlock(); startWave(g); paint(); }
-  else if (e.key === "Escape") { g.armed = null; g.selected = null; paint(); }
   else if (e.key >= "1" && e.key <= "4") { const id = ORDER[e.key - 1]; g.armed = g.armed === id ? null : id; g.selected = null; paint(); }
 });
 new ResizeObserver(measure).observe(wrap);
