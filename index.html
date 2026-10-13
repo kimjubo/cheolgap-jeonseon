@@ -57,6 +57,42 @@
   .nums strong { display: block; font-size: 18px; }
   #up { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
   .up-head { display: flex; gap: 8px; align-items: center; }
+  @media (max-aspect-ratio: 9/16) {
+    #app.side {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 76px;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    #app.side > header { grid-column: 1 / -1; padding-right: 8px; }
+    #app.side > #stage { grid-column: 1; grid-row: 2; min-width: 0; min-height: 0; }
+    #app.side > #dock {
+      grid-column: 2; grid-row: 2;
+      width: 76px; min-height: 0; overflow: auto;
+      padding: 6px 6px max(8px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-right));
+      gap: 6px;
+    }
+    #app.side .icon { min-width: 40px; height: 40px; font-size: 12px; padding: 0 6px; }
+    #app.side .shop { grid-template-columns: 1fr; gap: 6px; }
+    #app.side .tower { min-height: 62px; padding: 4px 2px; }
+    #app.side .tower img { width: 32px; height: 32px; }
+    #app.side .tower b { font-size: 14px; line-height: 1; }
+    #app.side .tower small, #app.side #preview { display: none; }
+    #app.side #play.btn.small {
+      height: auto; min-height: 46px; font-size: 15px;
+      white-space: normal; line-height: 1.15; padding: 6px 2px;
+    }
+    #app.side #up {
+      position: absolute; z-index: 6;
+      left: 8px; right: 84px; bottom: 8px;
+      max-height: 46%; overflow: auto;
+    }
+    #app.side .coach {
+      position: absolute; z-index: 4;
+      left: 8px; right: 84px; bottom: 8px;
+      margin: 0; padding: 6px 8px; border-radius: 10px;
+      background: rgb(16 24 32 / .78);
+    }
+  }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -662,6 +698,8 @@ function paint() {
   document.getElementById("end").hidden = g.phase !== "victory" && g.phase !== "defeat";
   document.getElementById("pause").hidden = !paused;
   document.getElementById("dock").hidden = g.phase !== "prep" && g.phase !== "combat";
+  const side = (g.phase === "prep" || g.phase === "combat") && window.matchMedia("(max-aspect-ratio: 9/16)").matches;
+  document.getElementById("app").classList.toggle("side", side);
   const pauseBtn = document.getElementById("pause-btn");
   pauseBtn.disabled = !canPause();
   pauseBtn.textContent = "일시정지";
@@ -678,13 +716,16 @@ function paint() {
   }
   const play = document.getElementById("play");
   play.disabled = paused || g.phase !== "prep";
-  play.textContent = g.phase === "prep" ? "플레이 · 제 " + (g.waveCursor + 1) + " 파도" : "교전 중 · 적 " + enemyCount();
+  play.textContent = side ? (g.phase === "prep" ? "플레이" : "교전") : (g.phase === "prep" ? "플레이 · 제 " + (g.waveCursor + 1) + " 파도" : "교전 중 · 적 " + enemyCount());
   const preview = document.getElementById("preview");
   preview.textContent = g.phase === "prep" && WAVES[g.waveCursor] ? WAVES[g.waveCursor].map((w) => ENEMIES[w.type].name + " " + w.count).join(" · ") : "";
   const sel = g.selected != null ? g.towers.find((t) => t.id === g.selected) : null;
   document.getElementById("shop").hidden = !!sel;
   document.getElementById("up").hidden = !sel;
   document.getElementById("coach").hidden = !(g.towers.length === 0 && g.phase === "prep" && !paused);
+  document.getElementById("coach").textContent = side
+    ? "오른쪽 포탑을 고르고, 지도의 노란 원을 누른 뒤 플레이를 누르세요"
+    : "1. 아래 포탑을 고르고 2. 노란 원을 누른 뒤 3. 플레이를 누르세요";
   for (const id of ORDER) {
     const btn = document.getElementById("t-" + id);
     btn.dataset.on = g.armed === id ? "true" : "false";
@@ -713,6 +754,7 @@ function paintPips(id, n) {
 }
 function artURL(name) { return (window.ART && window.ART[name]) || ""; }
 function measure() { const r = wrap.getBoundingClientRect(); box.w = r.width; box.h = r.height; }
+new ResizeObserver(measure).observe(wrap);
 function frame(now) {
   const raw = Math.min(0.05, (now - last) / 1000); last = now;
   let changed = false;

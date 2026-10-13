@@ -513,6 +513,8 @@ function paint() {
   document.getElementById("end").hidden = g.phase !== "victory" && g.phase !== "defeat";
   document.getElementById("pause").hidden = !paused;
   document.getElementById("dock").hidden = g.phase !== "prep" && g.phase !== "combat";
+  const side = (g.phase === "prep" || g.phase === "combat") && window.matchMedia("(max-aspect-ratio: 9/16)").matches;
+  document.getElementById("app").classList.toggle("side", side);
   const pauseBtn = document.getElementById("pause-btn");
   pauseBtn.disabled = !canPause();
   pauseBtn.textContent = "일시정지";
@@ -529,13 +531,16 @@ function paint() {
   }
   const play = document.getElementById("play");
   play.disabled = paused || g.phase !== "prep";
-  play.textContent = g.phase === "prep" ? "플레이 · 제 " + (g.waveCursor + 1) + " 파도" : "교전 중 · 적 " + enemyCount();
+  play.textContent = side ? (g.phase === "prep" ? "플레이" : "교전") : (g.phase === "prep" ? "플레이 · 제 " + (g.waveCursor + 1) + " 파도" : "교전 중 · 적 " + enemyCount());
   const preview = document.getElementById("preview");
   preview.textContent = g.phase === "prep" && WAVES[g.waveCursor] ? WAVES[g.waveCursor].map((w) => ENEMIES[w.type].name + " " + w.count).join(" · ") : "";
   const sel = g.selected != null ? g.towers.find((t) => t.id === g.selected) : null;
   document.getElementById("shop").hidden = !!sel;
   document.getElementById("up").hidden = !sel;
   document.getElementById("coach").hidden = !(g.towers.length === 0 && g.phase === "prep" && !paused);
+  document.getElementById("coach").textContent = side
+    ? "오른쪽 포탑을 고르고, 지도의 노란 원을 누른 뒤 플레이를 누르세요"
+    : "1. 아래 포탑을 고르고 2. 노란 원을 누른 뒤 3. 플레이를 누르세요";
   for (const id of ORDER) {
     const btn = document.getElementById("t-" + id);
     btn.dataset.on = g.armed === id ? "true" : "false";
@@ -564,6 +569,7 @@ function paintPips(id, n) {
 }
 function artURL(name) { return (window.ART && window.ART[name]) || ""; }
 function measure() { const r = wrap.getBoundingClientRect(); box.w = r.width; box.h = r.height; }
+new ResizeObserver(measure).observe(wrap);
 function frame(now) {
   const raw = Math.min(0.05, (now - last) / 1000); last = now;
   let changed = false;
