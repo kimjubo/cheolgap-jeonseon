@@ -62,7 +62,10 @@
   .pips i { width: 8px; height: 8px; border-radius: 99px; background: var(--border); display: block; }
   .pips i.on { background: var(--gold); }
   #end { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgb(16 24 32 / .72); padding: 16px; }
-  #end .card { width: min(100%, 380px); text-align: center; }
+  #end .card { width: min(100%, 380px); max-height: 100%; overflow-y: auto; text-align: center; }
+  #victory-art { display: block; width: 100%; height: auto; max-height: 25dvh; margin: 10px auto 14px; }
+  #victory-art[hidden] { display: none; }
+  #end-title { text-wrap: balance; }
   .nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
   .nums div { background: var(--surface-2); border-radius: 12px; padding: 8px; }
   .nums strong { display: block; font-size: 18px; }
@@ -156,7 +159,21 @@
     <div id="end" class="scrim" hidden style="justify-content:center;background:rgb(16 24 32 / .72)">
       <div class="card plate">
         <div id="end-kicker" class="kicker">승리</div>
-        <h2 id="end-title">전선 사수</h2>
+        <svg id="victory-art" viewBox="0 0 640 280" role="img" aria-labelledby="victory-art-title" xmlns="http://www.w3.org/2000/svg" hidden>
+<title id="victory-art-title">떠오르는 태양 아래 깃발을 세운 인류의 병사와 살아남은 식민지</title>
+<defs><linearGradient id="victory-sky" x2="0" y2="1"><stop stop-color="#102a42"/><stop offset="1" stop-color="#eab56a"/></linearGradient><radialGradient id="victory-glow"><stop stop-color="#fff4bf" stop-opacity=".8"/><stop offset="1" stop-color="#ffe3a0" stop-opacity="0"/></radialGradient></defs>
+<rect width="640" height="280" rx="14" fill="url(#victory-sky)"/>
+<circle cx="332" cy="142" r="135" fill="url(#victory-glow)"/><circle cx="332" cy="142" r="54" fill="#ffe6a3"/>
+<g fill="#6d8491"><path d="M0 196 60 142 110 184 171 126 238 192 294 164 369 193 441 139 503 185 565 151 640 191V280H0Z"/></g>
+<g fill="#293e50" stroke="#91b7c5" stroke-width="2"><path d="M22 220V180H74V220M82 222V153H119V222M128 226V188H184V226M462 226V174H507V226M518 226V147H555V226M566 226V185H612V226"/><path d="M38 180V164H59V180M531 147V126H543V147"/></g>
+<g fill="#f3c770"><path d="M91 168H99V178H91ZM105 168H113V178H105ZM533 164H541V175H533ZM478 190H488V200H478Z"/></g>
+<path d="M0 255 132 231 231 243 315 217 425 234 524 228 640 247V280H0Z" fill="#132330"/>
+<path d="M397 217V48" stroke="#c8dce5" stroke-width="5"/><path d="M400 50C438 31 467 74 513 51L503 111C465 132 439 88 400 109Z" fill="#369ce8" stroke="#8cd6ff" stroke-width="2"/><path d="m448 61 6 14 15 2-11 10 3 15-13-8-13 8 3-15-11-10 15-2Z" fill="#e5f6ff"/>
+<g fill="#52788d" stroke="#bed9e4" stroke-width="3" stroke-linejoin="round"><path d="m304 175-13 35-7 40h24l12-43 10 43h25l-12-48-7-30Z"/><path d="m301 124-15 15 9 44h47l10-44-18-16Z"/><path d="m289 135-18 30 13 13 22-32M343 135l22 13 29-15 8 14-37 22-29-17Z"/><path d="M302 96q15-19 31 0v24l-15 10-16-10Z"/><path d="M303 102h29v11h-29Z" fill="#8ce0f5"/><path d="M307 140h25v23h-25Z" fill="#2d4658"/></g>
+<path d="m317 144 4 7 8 1-6 5 1 7-7-4-7 4 1-7-6-5 8-1Z" fill="#f3c770"/>
+<g fill="#b5d4e5"><circle cx="76" cy="41" r="2"/><circle cx="168" cy="65" r="2"/><circle cx="559" cy="30" r="2"/></g>
+</svg>
+        <h2 id="end-title">인류는 승리했다</h2>
         <p id="end-copy" class="muted"></p>
         <div class="nums">
           <div><span class="muted">목숨</span><strong id="end-lives">0</strong></div>
@@ -895,8 +912,10 @@ function paint() {
   best.textContent = "최고 기록 " + save.bestWave + "파도 · 처치 " + save.bestKills;
   for (const b of document.querySelectorAll("#diff button")) b.dataset.on = b.dataset.diff === (g.difficulty || "easy") ? "true" : "false";
   if (g.phase === "victory" || g.phase === "defeat") {
+    const victoryArt = document.getElementById("victory-art");
+    if (victoryArt) victoryArt.hidden = g.phase !== "victory";
     document.getElementById("end-kicker").textContent = g.phase === "victory" ? "승리" : "패배";
-    document.getElementById("end-title").textContent = g.phase === "victory" ? "전선 사수" : "전선 붕괴";
+    document.getElementById("end-title").textContent = g.phase === "victory" ? "인류는 승리했다" : "전선 붕괴";
     document.getElementById("end-copy").textContent = g.phase === "victory" ? (g.rankMessage || "순위를 확인하고 있습니다.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
     document.getElementById("end-nick").hidden = g.phase !== "victory" || g.rankState !== "qualified";
     for (const id of ["end-board"]) {
