@@ -678,8 +678,10 @@ function paint() {
   best.textContent = "최고 기록 " + save.bestWave + "파도 · 처치 " + save.bestKills;
   for (const b of document.querySelectorAll("#diff button")) b.dataset.on = b.dataset.diff === (g.difficulty || "easy") ? "true" : "false";
   if (g.phase === "victory" || g.phase === "defeat") {
+    const victoryArt = document.getElementById("victory-art");
+    if (victoryArt) victoryArt.hidden = g.phase !== "victory";
     document.getElementById("end-kicker").textContent = g.phase === "victory" ? "승리" : "패배";
-    document.getElementById("end-title").textContent = g.phase === "victory" ? "전선 사수" : "전선 붕괴";
+    document.getElementById("end-title").textContent = g.phase === "victory" ? "인류는 승리했다" : "전선 붕괴";
     document.getElementById("end-copy").textContent = g.phase === "victory" ? (g.rankMessage || "순위를 확인하고 있습니다.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
     const endNick = document.getElementById("end-nick");
     if (endNick) endNick.hidden = g.phase !== "victory" || g.rankState !== "qualified";
