@@ -5,8 +5,8 @@ function parseRecord(issue) {
   if (!match) return null;
   try {
     const r = JSON.parse(match[1]);
-    if (r.version !== 1 || r.wave !== 20 || !['easy','normal','hard'].includes(r.difficulty)) return null;
-    if (!Number.isSafeInteger(r.gold) || r.gold < 0 || r.gold > 1000000 || !Number.isSafeInteger(r.kills) || r.kills < 0 || r.kills > 10000) return null;
+    if (r.version !== 1 || (r.difficulty==='endless'?(!Number.isSafeInteger(r.wave)||r.wave<1):r.wave!==20) || !['easy','normal','hard','endless'].includes(r.difficulty)) return null;
+    if (!Number.isSafeInteger(r.gold) || r.gold < 0 || r.gold > 2147483647 || !Number.isSafeInteger(r.kills) || r.kills < 0 || r.kills > 2147483647) return null;
     const name = String(r.name || '').replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,10);
     if (!name) return null;
     return {name, gold:r.gold, kills:r.kills, difficulty:r.difficulty, at:Date.parse(issue.created_at), issue:issue.number};

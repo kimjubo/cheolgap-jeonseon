@@ -20,7 +20,7 @@ Deno.serve(async request => {
   try{
     const text=await request.text();if(text.length>4096)return reply({error:'size'},413);
     const r=JSON.parse(text),name=String(r.name||'').trim();
-    if(r.version!==1||r.wave!==20||!name||name.length>10||/[\u0000-\u001f\u007f]/.test(name)||!Number.isInteger(r.gold)||r.gold<0||r.gold>1000000||!Number.isInteger(r.kills)||r.kills<0||r.kills>10000||!['easy','normal','hard'].includes(r.difficulty)||!/^\d{10,20}$/.test(r.runId)) return reply({error:'invalid record'},400);
+    if(r.version!==1||(r.difficulty==='endless'?(!Number.isSafeInteger(r.wave)||r.wave<1):r.wave!==20)||!name||name.length>10||/[\u0000-\u001f\u007f]/.test(name)||!Number.isInteger(r.gold)||r.gold<0||r.gold>2147483647||!Number.isInteger(r.kills)||r.kills<0||r.kills>2147483647||!['easy','normal','hard','endless'].includes(r.difficulty)||!/^\d{10,20}$/.test(r.runId)) return reply({error:'invalid record'},400);
     const result=await rest('rpc/submit_game_rank',{method:'POST',body:JSON.stringify({p_run_id:r.runId,p_name:name,p_gold:r.gold,p_kills:r.kills,p_difficulty:r.difficulty})});
     return result.ok?reply(await result.json()):reply({error:'save failed'},503);
   }catch{return reply({error:'invalid request'},400);}

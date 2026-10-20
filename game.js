@@ -6,6 +6,7 @@ const DIFF_HP = { easy: 1, normal: 1.25, hard: 1.6, endless: 1 };
 const DIFF_GOLD = { easy: 1, normal: 1.2, hard: 1.6, endless: 1 };
 function isEndless(game) { return game.difficulty === "endless"; }
 function maxRank(game) { return isEndless(game) ? 4 : MAX_RANK; }
+function isRankResult(game) { return isEndless(game) ? game.phase === "defeat" : game.phase === "victory"; }
 const PATH = [[1,0],[1,1],[1,2],[2,2],[3,2],[4,2],[4,3],[4,4],[3,4],[2,4],[1,4],[1,5],[1,6],[2,6],[3,6],[4,6],[4,7],[4,8],[3,8],[2,8],[2,9]];
 const PATH_KEY = new Set(PATH.map(([x, y]) => x + y * COLS));
 const BLOCKED = new Set([0, 5, (ROWS - 1) * COLS, (ROWS - 1) * COLS + COLS - 1]);
@@ -91,7 +92,7 @@ function typedName() {
   return ((el && el.value) || "").trim().slice(0, 10);
 }
 function recordBoard(g) {
-  if (g.boarded || g.phase !== "victory" || isEndless(g)) return;
+  if (g.boarded || !isRankResult(g)) return;
   g.boarded = true;
   const nameInput = document.getElementById("clear-name");
   if (nameInput) nameInput.value = save.nick || "";
@@ -101,7 +102,7 @@ function recordBoard(g) {
 
 }
 function renameEntry() {
-  if (g.phase !== "victory" || !g.boardAt) return;
+  if (!isRankResult(g) || !g.boardAt) return;
   const row = save.board.find((r) => r.at === g.boardAt);
   if (!row) return;
   row.name = typedName() || "지휘관";
@@ -145,11 +146,11 @@ function qualifiesForRank(gold, rows) {
 async function checkQualification(game) {
   const run = game.boardAt = Date.now();
   await loadOnlineBoard();
-  if (game.boardAt !== run || game.phase !== "victory") return;
+  if (game.boardAt !== run || !isRankResult(game)) return;
   if (onlineState !== "ready") {
     game.rankState = "error"; game.rankMessage = "순위를 확인하지 못했습니다. 순위표를 다시 열어 주세요.";
   } else if (!qualifiesForRank(game.gold, onlineRows)) {
-    game.rankState = "outside"; game.rankMessage = "전선 사수 완료. 광물 " + game.gold + "개 · 순위권 밖입니다.";
+    game.rankState = "outside"; game.rankMessage = (isEndless(game) ? "무제한 방어 종료. 광물 " : "전선 사수 완료. 광물 ") + game.gold + "개 · 순위권 밖입니다.";
   } else {
     game.rankState = "qualified";
     game.rankMessage = "광물 " + game.gold + "개로 순위권에 들었습니다. 플레이어 이름을 남겨 주세요.";
@@ -157,7 +158,7 @@ async function checkQualification(game) {
   paint();
 }
 async function submitOnlineRecord() {
-  if (g.phase !== "victory" || g.rankState !== "qualified") return;
+  if (!isRankResult(g) || g.rankState !== "qualified") return;
   const name = typedName();
   if (!name) { g.rankMessage = "플레이어 이름을 입력해 주세요."; paint(); return; }
   save.nick = name; writeSave(save);
@@ -165,19 +166,19 @@ async function submitOnlineRecord() {
     g.rankMessage = "온라인 저장 연결을 준비 중입니다. 아직 순위표에 등록되지 않았습니다."; paint(); return;
   }
   const run = g.boardAt;
-  const record = {version: 1, wave: WAVES.length, name, gold: g.gold | 0, kills: g.kills | 0, difficulty: g.difficulty, runId: String(run)};
+  const record = {version: 1, wave: isEndless(g) ? g.activeWave + 1 : WAVES.length, name, gold: g.gold | 0, kills: g.kills | 0, difficulty: g.difficulty, runId: String(run)};
   g.rankState = "saving"; g.rankMessage = "이름을 남기고 있습니다."; paint();
   try {
     const response = await fetch(rankingEndpoint, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(record)});
     if (!response.ok) throw new Error("save");
     const result = await response.json();
-    if (g.boardAt !== run || g.phase !== "victory") return;
+    if (g.boardAt !== run || !isRankResult(g)) return;
     if (!Array.isArray(result.rows) || typeof result.accepted !== "boolean") throw new Error("invalid response");
     onlineRows = cleanBoard(result.rows).slice(0, 12);
     g.rankState = result.accepted ? "saved" : "outside";
     g.rankMessage = result.accepted ? "순위표에 이름을 남겼습니다." : "다른 기록이 올라와 순위권에서 벗어났습니다.";
   } catch {
-    if (g.boardAt !== run || g.phase !== "victory") return;
+    if (g.boardAt !== run || !isRankResult(g)) return;
     g.rankState = "qualified"; g.rankMessage = "저장하지 못했습니다. 다시 눌러 주세요.";
   }
   paint();
@@ -224,7 +225,7 @@ function leak(g, e) {
   const end = pointOnPath(PATH_TOTAL);
   floater(g, end.x, end.y - 0.4, "-" + e.leak, "#d6457a");
   sfx.leak();
-  if (g.lives <= 0) { g.lives = 0; g.phase = "defeat"; g.announce = { text: "전선 붕괴", life: 2, max: 2 }; sfx.lose(); }
+  if (g.lives <= 0) { g.lives = 0; g.phase = "defeat"; g.announce = { text: "전선 붕괴", life: 2, max: 2 }; sfx.lose(); if (isEndless(g)) recordBoard(g); }
 }
 function pickTarget(g, t, range) {
   const tx = t.gx + 0.5, ty = t.gy + 0.5, r2 = range * range;
@@ -693,16 +694,16 @@ function paint() {
     if (victoryArt) victoryArt.hidden = g.phase !== "victory";
     document.getElementById("end-kicker").textContent = g.phase === "victory" ? "승리" : isEndless(g) ? "무제한 · 게임 오버" : "패배";
     document.getElementById("end-title").textContent = g.phase === "victory" ? "인류는 승리했다" : "전선 붕괴";
-    document.getElementById("end-copy").textContent = g.phase === "victory" ? (g.rankMessage || "순위를 확인하고 있습니다.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
+    document.getElementById("end-copy").textContent = isRankResult(g) ? (isEndless(g) ? "제 " + (g.activeWave + 1) + " 파도에서 방어 종료. " : "") + (g.rankMessage || "순위를 확인하고 있습니다.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
     const endNick = document.getElementById("end-nick");
-    if (endNick) endNick.hidden = g.phase !== "victory" || g.rankState !== "qualified";
+    if (endNick) endNick.hidden = !isRankResult(g) || g.rankState !== "qualified";
     for (const id of ["end-board"]) {
       const button = document.getElementById(id);
-      if (button) button.hidden = g.phase !== "victory";
+      if (button) button.hidden = !isRankResult(g);
     }
     const submitButton = document.getElementById("submit-record");
     if (submitButton) {
-      submitButton.hidden = g.phase !== "victory" || !["qualified", "saving"].includes(g.rankState);
+      submitButton.hidden = !isRankResult(g) || !["qualified", "saving"].includes(g.rankState);
       submitButton.disabled = g.rankState === "saving";
     }
     document.getElementById("end-lives").textContent = g.lives;

@@ -10,7 +10,7 @@ module.exports=async({github,context})=>{
   const incoming=await response.json();
   if(!Array.isArray(incoming.rows)||incoming.rows.length>12)throw Error('invalid rankings');
   const rows=incoming.rows.map(r=>{
-    if(typeof r.name!=='string'||!r.name.trim()||r.name.length>10||!Number.isInteger(r.gold)||r.gold<0||r.gold>1000000||!Number.isInteger(r.kills)||r.kills<0||r.kills>10000||!['easy','normal','hard'].includes(r.difficulty)||!Number.isSafeInteger(r.at))throw Error('invalid record');
+    if(typeof r.name!=='string'||!r.name.trim()||r.name.length>10||!Number.isInteger(r.gold)||r.gold<0||r.gold>2147483647||!Number.isInteger(r.kills)||r.kills<0||r.kills>2147483647||!['easy','normal','hard','endless'].includes(r.difficulty)||!Number.isSafeInteger(r.at))throw Error('invalid record');
     return {name:r.name,gold:r.gold,kills:r.kills,difficulty:r.difficulty,at:r.at};
   }).sort((a,b)=>b.gold-a.gold||a.at-b.at);
   const old=await read('data/rankings.json');
