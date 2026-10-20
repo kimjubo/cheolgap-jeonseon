@@ -1,7 +1,14 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-20T10:35:51.627Z",
+  "updatedAt": "2026-10-20T14:24:27.450Z",
   "rows": [
+    {
+      "name": "제작자김주보",
+      "gold": 521285,
+      "kills": 8810,
+      "difficulty": "endless",
+      "at": 1792494336162
+    },
     {
       "name": "제작자김주보",
       "gold": 13270,
