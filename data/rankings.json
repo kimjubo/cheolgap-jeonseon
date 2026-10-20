@@ -1,14 +1,5 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-20T04:07:34.332Z",
-  "rows": [
-    {
-      "name": "제작자김주보",
-      "gold": 8418,
-      "kills": 798,
-      "difficulty": "hard",
-      "at": 1792469245000,
-      "issue": 12
-    }
-  ]
+  "updatedAt": "2026-10-20T04:24:06.076Z",
+  "rows": []
 }
