@@ -71,7 +71,7 @@ function cleanBoard(rows) {
     kills: r.kills | 0,
     difficulty: diffName(r.difficulty),
     at: Number(r.at) || 0,
-  })).sort((a, b) => b.gold - a.gold || b.kills - a.kills || b.at - a.at);
+  })).sort((a, b) => b.gold - a.gold || a.at - b.at);
 }
 function loadSave() {
   try {
@@ -92,11 +92,10 @@ function recordBoard(g) {
   g.boarded = true;
   const nameInput = document.getElementById("clear-name");
   if (nameInput) nameInput.value = save.nick || "";
-  const row = { name: typedName() || "지휘관", gold: g.gold | 0, kills: g.kills | 0, difficulty: diffName(g.difficulty), at: Date.now() };
-  g.boardAt = row.at;
-  save.board = cleanBoard(save.board.concat(row));
-  g.boardRank = save.board.findIndex((r) => r.at === row.at) + 1;
-  writeSave(save);
+  g.rankState = "checking";
+  g.rankMessage = "순위를 확인하고 있습니다.";
+  checkQualification(g);
+
 }
 function renameEntry() {
   if (g.phase !== "victory" || !g.boardAt) return;
@@ -119,11 +118,17 @@ function renderBoard() {
 
 let onlineRows = [];
 let onlineState = "loading";
+let rankingEndpoint = "";
 async function loadOnlineBoard() {
   onlineState = "loading";
+  renderBoard();
   try {
-    const response = await fetch("https://raw.githubusercontent.com/kimjubo/cheolgap-jeonseon/main/data/rankings.json?t=" + Date.now(), {cache: "no-store"});
-    if (!response.ok) throw new Error("rankings " + response.status);
+    const configResponse = await fetch("data/rankings-config.json?t=" + Date.now(), {cache: "no-store"});
+    if (!configResponse.ok) throw new Error("config");
+    const config = await configResponse.json();
+    rankingEndpoint = config.endpoint || "";
+    const response = await fetch(rankingEndpoint || "https://raw.githubusercontent.com/kimjubo/cheolgap-jeonseon/main/data/rankings.json?t=" + Date.now(), {cache: "no-store"});
+    if (!response.ok) throw new Error("rankings");
     const data = await response.json();
     if (!Array.isArray(data.rows)) throw new Error("invalid rankings");
     onlineRows = cleanBoard(data.rows).slice(0, 12);
@@ -131,14 +136,48 @@ async function loadOnlineBoard() {
   } catch { onlineState = "error"; }
   renderBoard();
 }
-function submitOnlineRecord() {
-  if (g.phase !== "victory") return;
-  renameEntry();
-  const record = {version: 1, wave: WAVES.length, name: typedName() || "지휘관", gold: g.gold | 0, kills: g.kills | 0, difficulty: g.difficulty};
-  const body = "게임에서 제출한 전체 클리어 기록입니다. 공개 순위표에 이름과 점수가 표시됩니다.\n\n```json\n" + JSON.stringify(record) + "\n```";
-  const url = "https://github.com/kimjubo/cheolgap-jeonseon/issues/new?title=" + encodeURIComponent("[철갑전선 기록] " + record.name) + "&body=" + encodeURIComponent(body);
-  window.open(url, "_blank", "noopener,noreferrer");
-  document.getElementById("end-copy").textContent = "GitHub에서 Submit new issue를 누르면 접수됩니다. 집계 후 상위 12명에 반영됩니다.";
+function qualifiesForRank(gold, rows) {
+  return rows.length < 12 || gold > rows[11].gold;
+}
+async function checkQualification(game) {
+  const run = game.boardAt = Date.now();
+  await loadOnlineBoard();
+  if (game.boardAt !== run || game.phase !== "victory") return;
+  if (onlineState !== "ready") {
+    game.rankState = "error"; game.rankMessage = "순위를 확인하지 못했습니다. 순위표를 다시 열어 주세요.";
+  } else if (!qualifiesForRank(game.gold, onlineRows)) {
+    game.rankState = "outside"; game.rankMessage = "전선 사수 완료. 광물 " + game.gold + "개 · 순위권 밖입니다.";
+  } else {
+    game.rankState = "qualified";
+    game.rankMessage = "광물 " + game.gold + "개로 순위권에 들었습니다. 플레이어 이름을 남겨 주세요.";
+  }
+  paint();
+}
+async function submitOnlineRecord() {
+  if (g.phase !== "victory" || g.rankState !== "qualified") return;
+  const name = typedName();
+  if (!name) { g.rankMessage = "플레이어 이름을 입력해 주세요."; paint(); return; }
+  save.nick = name; writeSave(save);
+  if (!rankingEndpoint) {
+    g.rankMessage = "온라인 저장 연결을 준비 중입니다. 아직 순위표에 등록되지 않았습니다."; paint(); return;
+  }
+  const run = g.boardAt;
+  const record = {version: 1, wave: WAVES.length, name, gold: g.gold | 0, kills: g.kills | 0, difficulty: g.difficulty, runId: String(run)};
+  g.rankState = "saving"; g.rankMessage = "이름을 남기고 있습니다."; paint();
+  try {
+    const response = await fetch(rankingEndpoint, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(record)});
+    if (!response.ok) throw new Error("save");
+    const result = await response.json();
+    if (g.boardAt !== run || g.phase !== "victory") return;
+    if (!Array.isArray(result.rows) || typeof result.accepted !== "boolean") throw new Error("invalid response");
+    onlineRows = cleanBoard(result.rows).slice(0, 12);
+    g.rankState = result.accepted ? "saved" : "outside";
+    g.rankMessage = result.accepted ? "순위표에 이름을 남겼습니다." : "다른 기록이 올라와 순위권에서 벗어났습니다.";
+  } catch {
+    if (g.boardAt !== run || g.phase !== "victory") return;
+    g.rankState = "qualified"; g.rankMessage = "저장하지 못했습니다. 다시 눌러 주세요.";
+  }
+  paint();
 }
 let boardOpen = false;
 
@@ -638,12 +677,17 @@ function paint() {
   if (g.phase === "victory" || g.phase === "defeat") {
     document.getElementById("end-kicker").textContent = g.phase === "victory" ? "승리" : "패배";
     document.getElementById("end-title").textContent = g.phase === "victory" ? "전선 사수" : "전선 붕괴";
-    document.getElementById("end-copy").textContent = g.phase === "victory" ? (g.boardRank ? "스무 번의 파도를 모두 막아냈습니다. 개인 기록 " + g.boardRank + "위. 이름을 입력한 뒤 기록 저장을 누르세요." : "스무 번의 파도를 모두 막아냈습니다. 이름을 입력한 뒤 기록 저장을 누르세요.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
+    document.getElementById("end-copy").textContent = g.phase === "victory" ? (g.rankMessage || "순위를 확인하고 있습니다.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
     const endNick = document.getElementById("end-nick");
-    if (endNick) endNick.hidden = !(g.phase === "victory");
-    for (const id of ["save-record", "submit-record", "end-board", "submit-note"]) {
+    if (endNick) endNick.hidden = g.phase !== "victory" || g.rankState !== "qualified";
+    for (const id of ["end-board"]) {
       const button = document.getElementById(id);
       if (button) button.hidden = g.phase !== "victory";
+    }
+    const submitButton = document.getElementById("submit-record");
+    if (submitButton) {
+      submitButton.hidden = g.phase !== "victory" || !["qualified", "saving"].includes(g.rankState);
+      submitButton.disabled = g.rankState === "saving";
     }
     document.getElementById("end-lives").textContent = g.lives;
     document.getElementById("end-gold").textContent = g.gold;
@@ -741,13 +785,6 @@ if (openBoard) openBoard.onclick = () => { boardOpen = true; loadOnlineBoard(); 
 const closeBoard = document.getElementById("close-board");
 if (closeBoard) closeBoard.onclick = () => { boardOpen = false; paint(); };
 const clearName = document.getElementById("clear-name");
-if (clearName) clearName.addEventListener("input", () => { renameEntry(); const copy = document.getElementById("end-copy"); if (copy) copy.textContent = g.boardRank ? "스무 번의 파도를 모두 막아냈습니다. 개인 기록 " + g.boardRank + "위. 이름을 입력한 뒤 기록 저장을 누르세요." : "스무 번의 파도를 모두 막아냈습니다. 이름을 입력한 뒤 기록 저장을 누르세요."; });
-const saveRecord = document.getElementById("save-record");
-if (saveRecord) saveRecord.onclick = () => {
-  if (g.phase !== "victory") return;
-  renameEntry();
-  document.getElementById("end-copy").textContent = "이 기기에 저장 완료 · 개인 기록 " + g.boardRank + "위";
-};
 const submitRecord = document.getElementById("submit-record");
 if (submitRecord) submitRecord.onclick = submitOnlineRecord;
 const endBoard = document.getElementById("end-board");
