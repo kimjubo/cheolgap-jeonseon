@@ -70,8 +70,8 @@ function cleanBoard(rows) {
     gold: r.gold | 0,
     kills: r.kills | 0,
     difficulty: diffName(r.difficulty),
-    at: r.at | 0,
-  })).sort((a, b) => b.gold - a.gold || b.kills - a.kills || b.at - a.at).slice(0, 10);
+    at: Number(r.at) || 0,
+  })).sort((a, b) => b.gold - a.gold || b.kills - a.kills || b.at - a.at);
 }
 function loadSave() {
   try {
@@ -90,6 +90,8 @@ function typedName() {
 function recordBoard(g) {
   if (g.boarded || g.phase !== "victory") return;
   g.boarded = true;
+  const nameInput = document.getElementById("clear-name");
+  if (nameInput) nameInput.value = save.nick || "";
   const row = { name: typedName() || "지휘관", gold: g.gold | 0, kills: g.kills | 0, difficulty: diffName(g.difficulty), at: Date.now() };
   g.boardAt = row.at;
   save.board = cleanBoard(save.board.concat(row));
@@ -109,8 +111,34 @@ function renameEntry() {
 function renderBoard() {
   const list = document.getElementById("rank-list");
   if (!list) return;
-  if (!save.board.length) { list.innerHTML = '<p class="muted">아직 기록이 없습니다.</p>'; return; }
-  list.innerHTML = save.board.map((row, i) => '<div class="rank"><span>' + (i + 1) + '</span><div><b>' + esc(row.name) + '</b><small class="muted">' + (DIFF_LABEL[row.difficulty] || "") + '</small></div><strong>◆ ' + row.gold + '</strong></div>').join("");
+  if (onlineState === "loading") { list.textContent = "순위표를 불러오는 중입니다."; return; }
+  if (onlineState === "error") { list.textContent = "순위표를 불러오지 못했습니다. 닫았다가 다시 열어 주세요."; return; }
+  if (!onlineRows.length) { list.textContent = "아직 제출된 기록이 없습니다."; return; }
+  list.innerHTML = onlineRows.map((row, i) => '<div class="rank"><span>' + (i + 1) + '</span><div><b>' + esc(row.name) + '</b><small class="muted">' + (DIFF_LABEL[row.difficulty] || "") + '</small></div><strong>◆ ' + row.gold + '</strong></div>').join("");
+}
+
+let onlineRows = [];
+let onlineState = "loading";
+async function loadOnlineBoard() {
+  onlineState = "loading";
+  try {
+    const response = await fetch("https://raw.githubusercontent.com/kimjubo/cheolgap-jeonseon/main/data/rankings.json?t=" + Date.now(), {cache: "no-store"});
+    if (!response.ok) throw new Error("rankings " + response.status);
+    const data = await response.json();
+    if (!Array.isArray(data.rows)) throw new Error("invalid rankings");
+    onlineRows = cleanBoard(data.rows).slice(0, 12);
+    onlineState = "ready";
+  } catch { onlineState = "error"; }
+  renderBoard();
+}
+function submitOnlineRecord() {
+  if (g.phase !== "victory") return;
+  renameEntry();
+  const record = {version: 1, wave: WAVES.length, name: typedName() || "지휘관", gold: g.gold | 0, kills: g.kills | 0, difficulty: g.difficulty};
+  const body = "게임에서 제출한 전체 클리어 기록입니다. 공개 순위표에 이름과 점수가 표시됩니다.\n\n```json\n" + JSON.stringify(record) + "\n```";
+  const url = "https://github.com/kimjubo/cheolgap-jeonseon/issues/new?title=" + encodeURIComponent("[철갑전선 기록] " + record.name) + "&body=" + encodeURIComponent(body);
+  window.open(url, "_blank", "noopener,noreferrer");
+  document.getElementById("end-copy").textContent = "GitHub에서 Submit new issue를 누르면 접수됩니다. 집계 후 상위 12명에 반영됩니다.";
 }
 let boardOpen = false;
 
@@ -610,9 +638,13 @@ function paint() {
   if (g.phase === "victory" || g.phase === "defeat") {
     document.getElementById("end-kicker").textContent = g.phase === "victory" ? "승리" : "패배";
     document.getElementById("end-title").textContent = g.phase === "victory" ? "전선 사수" : "전선 붕괴";
-    document.getElementById("end-copy").textContent = g.phase === "victory" ? (g.boardRank ? "스무 번의 파도를 모두 막아냈습니다. 남은 광물 " + g.boardRank + "위. 이름을 남겨 주세요." : "스무 번의 파도를 모두 막아냈습니다. 상위 10명에는 들지 못했습니다.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
+    document.getElementById("end-copy").textContent = g.phase === "victory" ? (g.boardRank ? "스무 번의 파도를 모두 막아냈습니다. 개인 기록 " + g.boardRank + "위. 이름을 입력한 뒤 기록 저장을 누르세요." : "스무 번의 파도를 모두 막아냈습니다. 이름을 입력한 뒤 기록 저장을 누르세요.") : "제 " + (g.activeWave + 1) + " 파도에서 군체가 사령부를 뚫었습니다.";
     const endNick = document.getElementById("end-nick");
-    if (endNick) endNick.hidden = !(g.phase === "victory" && g.boardRank);
+    if (endNick) endNick.hidden = !(g.phase === "victory");
+    for (const id of ["save-record", "submit-record", "end-board", "submit-note"]) {
+      const button = document.getElementById(id);
+      if (button) button.hidden = g.phase !== "victory";
+    }
     document.getElementById("end-lives").textContent = g.lives;
     document.getElementById("end-gold").textContent = g.gold;
     document.getElementById("end-kills").textContent = g.kills;
@@ -705,11 +737,21 @@ function bootImages() {
 
 document.getElementById("go").onclick = begin;
 const openBoard = document.getElementById("open-board");
-if (openBoard) openBoard.onclick = () => { boardOpen = true; renderBoard(); paint(); };
+if (openBoard) openBoard.onclick = () => { boardOpen = true; loadOnlineBoard(); paint(); };
 const closeBoard = document.getElementById("close-board");
 if (closeBoard) closeBoard.onclick = () => { boardOpen = false; paint(); };
 const clearName = document.getElementById("clear-name");
-if (clearName) clearName.addEventListener("input", () => { renameEntry(); const copy = document.getElementById("end-copy"); if (copy) copy.textContent = g.boardRank ? "스무 번의 파도를 모두 막아냈습니다. 남은 광물 " + g.boardRank + "위. 이름을 남겨 주세요." : "스무 번의 파도를 모두 막아냈습니다. 상위 10명에는 들지 못했습니다."; });
+if (clearName) clearName.addEventListener("input", () => { renameEntry(); const copy = document.getElementById("end-copy"); if (copy) copy.textContent = g.boardRank ? "스무 번의 파도를 모두 막아냈습니다. 개인 기록 " + g.boardRank + "위. 이름을 입력한 뒤 기록 저장을 누르세요." : "스무 번의 파도를 모두 막아냈습니다. 이름을 입력한 뒤 기록 저장을 누르세요."; });
+const saveRecord = document.getElementById("save-record");
+if (saveRecord) saveRecord.onclick = () => {
+  if (g.phase !== "victory") return;
+  renameEntry();
+  document.getElementById("end-copy").textContent = "이 기기에 저장 완료 · 개인 기록 " + g.boardRank + "위";
+};
+const submitRecord = document.getElementById("submit-record");
+if (submitRecord) submitRecord.onclick = submitOnlineRecord;
+const endBoard = document.getElementById("end-board");
+if (endBoard) endBoard.onclick = () => { toMenu(); boardOpen = true; loadOnlineBoard(); paint(); };
 for (const b of document.querySelectorAll("#diff button")) b.onclick = () => { difficulty = b.dataset.diff; g.difficulty = difficulty; save.difficulty = difficulty; writeSave(save); paint(); };
 document.getElementById("menu").onclick = (e) => { if (e.target.id === "menu") begin(); };
 document.getElementById("again").onclick = restart;
@@ -744,6 +786,7 @@ canvas.addEventListener("pointerup", (e) => {
 });
 canvas.addEventListener("pointerleave", () => { g.hover = null; });
 window.addEventListener("keydown", (e) => {
+  if (e.target instanceof HTMLElement && (e.target.matches("input, textarea") || e.target.isContentEditable)) return;
   if (e.key === "Escape") {
     e.preventDefault();
     if (paused) setPaused(false);
@@ -760,3 +803,4 @@ sfx.setMuted(save.muted);
 document.getElementById("mute").textContent = save.muted ? "소리" : "음소거";
 for (const id of ORDER) document.getElementById("t-img-" + id).src = artURL("tower-" + id);
 bootImages().then(() => { measure(); paint(); requestAnimationFrame(frame); });
+
