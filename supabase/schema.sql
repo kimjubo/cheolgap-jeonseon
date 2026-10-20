@@ -9,10 +9,15 @@ create table if not exists public.game_rankings (
 );
 alter table public.game_rankings enable row level security;
 revoke all on public.game_rankings from anon, authenticated;
+grant select, insert, delete on public.game_rankings to service_role;
+grant usage, select on sequence public.game_rankings_id_seq to service_role;
 create or replace function public.submit_game_rank(p_run_id text, p_name text, p_gold integer, p_kills integer, p_difficulty text)
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security invoker set search_path = public as $$
 declare accepted boolean := false; rows_json jsonb; cutoff integer;
 begin
+  if p_run_id !~ '^\d{10,20}$' or p_name is null or btrim(p_name) = '' or char_length(p_name) > 10 or p_gold is null or p_gold < 0 or p_gold > 1000000 or p_kills is null or p_kills < 0 or p_kills > 10000 or p_difficulty is null or p_difficulty not in ('easy','normal','hard') then
+    raise exception 'invalid record';
+  end if;
   perform pg_advisory_xact_lock(728193);
   if not exists(select 1 from game_rankings where run_id=p_run_id) then
     select gold into cutoff from game_rankings order by gold desc, id asc offset 11 limit 1;
