@@ -1,7 +1,35 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-20T09:25:38.214Z",
+  "updatedAt": "2026-10-20T10:35:51.627Z",
   "rows": [
+    {
+      "name": "제작자김주보",
+      "gold": 13270,
+      "kills": 798,
+      "difficulty": "easy",
+      "at": 1792491542644
+    },
+    {
+      "name": "ㅋㅋㅋ",
+      "gold": 12610,
+      "kills": 798,
+      "difficulty": "normal",
+      "at": 1792492072181
+    },
+    {
+      "name": "제작자김주보",
+      "gold": 11366,
+      "kills": 798,
+      "difficulty": "hard",
+      "at": 1792489681046
+    },
+    {
+      "name": "제작자김주보",
+      "gold": 10884,
+      "kills": 792,
+      "difficulty": "hard",
+      "at": 1792491227659
+    },
     {
       "name": "제작자김주보",
       "gold": 10591,
