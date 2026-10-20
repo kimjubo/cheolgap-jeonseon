@@ -3,6 +3,7 @@ const DMG_MUL = 1.42, RATE_MUL = 0.8, DMG_COST = [50, 90, 140], RATE_COST = [45,
 function scaledCost(base, n) { return Math.max(1, Math.round(base * (1 + COST_STEP * n))); }
 const ENEMY_COUNT_MUL = 2, ENEMY_HP_MUL = 1.3, ENEMY_SPEED_STEP = 0.02;
 const DIFF_HP = { easy: 1, normal: 1.25, hard: 1.6 };
+const DIFF_GOLD = { easy: 1, normal: 1.2, hard: 1.6 };
 const PATH = [[1,0],[1,1],[1,2],[2,2],[3,2],[4,2],[4,3],[4,4],[3,4],[2,4],[1,4],[1,5],[1,6],[2,6],[3,6],[4,6],[4,7],[4,8],[3,8],[2,8],[2,9]];
 const PATH_KEY = new Set(PATH.map(([x, y]) => x + y * COLS));
 const BLOCKED = new Set([0, 5, (ROWS - 1) * COLS, (ROWS - 1) * COLS + COLS - 1]);
@@ -246,7 +247,9 @@ function spawnEnemy(g, kind) {
   for (const e of g.enemies) if (e.alive && e.pathDist < 0.45) queue++;
   const pathDist = -queue * 0.42, pos = pointOnPath(pathDist), wave = Math.max(0, g.activeWave);
   const hp = Math.max(1, Math.round(def.hp * ENEMY_HP_MUL * (DIFF_HP[g.difficulty] || 1) * (wave < 9 ? 1 : 1 + (wave - 9) * 0.11)));
-  g.enemies.push({ id: g.nextId++, kind, hp, maxHp: hp, speed: def.speed * (1 + ENEMY_SPEED_STEP * wave), gold: Math.max(1, Math.round(def.gold * (1 + Math.max(0, wave - 8) * 0.07))), armor: def.armor, flying: def.flying, leak: def.leak, pathDist, x: pos.x, y: pos.y, alive: true, flash: 0 });
+  const baseGold = Math.max(1, Math.round(def.gold * (1 + Math.max(0, wave - 8) * 0.07)));
+  const rewardGold = Math.round(baseGold * (DIFF_GOLD[g.difficulty] || 1));
+  g.enemies.push({ id: g.nextId++, kind, hp, maxHp: hp, speed: def.speed * (1 + ENEMY_SPEED_STEP * wave), gold: rewardGold, armor: def.armor, flying: def.flying, leak: def.leak, pathDist, x: pos.x, y: pos.y, alive: true, flash: 0 });
   if (kind === "titan") { g.shake = Math.max(g.shake, 10); g.announce = { text: "거대충 접근", life: 1.7, max: 1.7 }; }
 }
 function fire(g, t) {
