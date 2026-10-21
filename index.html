@@ -257,7 +257,7 @@ const ENEMIES = {
 };
 const TOWERS = {
   rifle: { name: "소총 요새", short: "소총", cost: 50, range: 1.65, damage: 11, interval: 0.36, shot: "bullet", shotSpeed: 9, splash: 0, vsFly: 1, armorPen: 0, blurb: "연사", special: "선두를 빠르게 깎습니다." },
-  flame: { name: "화염 포대", short: "화염", cost: 80, range: 1.2, damage: 7, interval: 0.16, shot: "flame", shotSpeed: 7.2, splash: 0.5, vsFly: 0.45, armorPen: 0, blurb: "광역", special: "가까운 무리를 태웁니다. 익충에게 약합니다." },
+  flame: { name: "화염 포대", short: "화염", cost: 80, range: 1.2, damage: 3.5, interval: 0.16, shot: "flame", shotSpeed: 7.2, splash: 0.5, vsFly: 0, armorPen: 0, blurb: "광역", special: "가까운 무리를 태웁니다. 익충은 공격하지 못합니다." },
   missile: { name: "추적 포탑", short: "추적", cost: 115, range: 2.5, damage: 28, interval: 1.05, shot: "missile", shotSpeed: 4.6, splash: 0.15, vsFly: 1.75, armorPen: 0, blurb: "대공", special: "유도탄. 익충에게 강합니다." },
   siege: { name: "곡사 전차", short: "곡사", cost: 175, range: 3.05, damage: 52, interval: 1.9, shot: "shell", shotSpeed: 3.5, splash: 0.82, vsFly: 1, armorPen: 0.55, blurb: "포격", special: "넓은 폭발. 장갑을 상당 부분 무시합니다." },
 };
@@ -464,10 +464,10 @@ function leak(g, e) {
   if (g.lives <= 0) { g.lives = 0; g.phase = "defeat"; g.announce = { text: "전선 붕괴", life: 2, max: 2 }; sfx.lose(); if (isEndless(g)) recordBoard(g); }
 }
 function pickTarget(g, t, range) {
-  const tx = t.gx + 0.5, ty = t.gy + 0.5, r2 = range * range;
+  const tx = t.gx + 0.5, ty = t.gy + 0.5, r2 = range * range, groundOnly = TOWERS[t.kind].vsFly === 0;
   let best = null, score = -Infinity;
   for (const e of g.enemies) {
-    if (!e.alive || e.pathDist < 0) continue;
+    if (!e.alive || e.pathDist < 0 || (groundOnly && e.flying)) continue;
     const d2 = (e.x - tx) ** 2 + (e.y - ty) ** 2;
     if (d2 > r2) continue;
     const s = t.target === "first" ? e.pathDist : t.target === "close" ? -d2 : e.hp;
@@ -506,7 +506,7 @@ function fire(g, t) {
 function explode(g, s) {
   const rad = s.splash > 0 ? s.splash : 0.3;
   for (const e of g.enemies) {
-    if (!e.alive) continue;
+    if (!e.alive || (e.flying && s.vsFly === 0)) continue;
     const d = Math.hypot(e.x - s.x, e.y - s.y);
     if (d > rad) continue;
     deal(g, e, s.damage * (s.splash > 0 ? 1 - (d / rad) * 0.5 : 1), s.armorPen, s.vsFly);
@@ -968,7 +968,7 @@ function paint() {
     const st = towerRuntime(sel);
     document.getElementById("up-name").textContent = TOWERS[sel.kind].name;
     document.getElementById("up-special").textContent = TOWERS[sel.kind].special;
-    document.getElementById("up-stats").textContent = "공격 " + Math.round(st.damage) + " · 연사 " + (1 / st.interval).toFixed(1) + "/초";
+    document.getElementById("up-stats").textContent = "공격 " + (st.damage < 10 ? +st.damage.toFixed(1) : Math.round(st.damage)) + " · 연사 " + (1 / st.interval).toFixed(1) + "/초";
     document.getElementById("up-target").textContent = TARGET_LABEL[sel.target];
     const dmg = document.getElementById("up-dmg"), rate = document.getElementById("up-rate");
     const dmgCost = sel.dmgRank >= maxRank(g) ? 0 : scaledCost(DMG_COST[sel.dmgRank], g.towers.length);
